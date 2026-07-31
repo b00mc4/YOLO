@@ -1,6 +1,6 @@
 from __future__ import annotations
 import re
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from app.schemas.user import UserRead
 
 class MessageResponse(BaseModel):
@@ -25,11 +25,18 @@ def _validate_password_policy(value: str) -> str:
 class SetPasswordRequest(BaseModel):
     token: str
     new_password: str
+    confirm_new_password: str
 
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
         return _validate_password_policy(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> SetPasswordRequest:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("New password and confirm password do not match")
+        return self
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -37,9 +44,16 @@ class ForgotPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+    confirm_new_password: str
     logout_all_sessions: bool
 
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
         return _validate_password_policy(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> ChangePasswordRequest:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("New password and confirm password do not match")
+        return self

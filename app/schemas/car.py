@@ -49,3 +49,24 @@ class CarRead(BaseModel):
     time_detect: datetime
     is_blacklist: bool
     created_at: datetime
+
+
+class CameraSummary(BaseModel):
+    id: uuid.UUID
+    name: str
+    village_id: uuid.UUID
+    village_name: str
+
+
+class CarDetailRead(BaseModel):
+    id: uuid.UUID
+    event_id: uuid.UUID
+    license_plate: str
+    province: str
+    color: str
+    image_crop: str
+    image_full: str
+    time_detect: datetime
+    is_blacklist: bool
+    created_at: datetime
+    camera: CameraSummary

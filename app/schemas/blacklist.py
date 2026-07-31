@@ -7,8 +7,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BlacklistCreate(BaseModel):
+    village_id: uuid.UUID | None = None
     license_plate: str
     province: str
+    reason: str
+
+
+class BlacklistUpdate(BaseModel):
     reason: str
 
 

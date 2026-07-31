@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Boolean, true
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,6 +17,7 @@ class Camera(Base):
     long = Column(Float(53), nullable=False)
     stream_url = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    is_active = Column(Boolean, nullable=False, server_default=true())
 
     village = relationship("Group", back_populates="cameras")
     detections = relationship("Car", back_populates="camera")

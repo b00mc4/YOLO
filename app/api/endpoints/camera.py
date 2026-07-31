@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import require_roles
+from app.db.session import get_db
+from app.models.user import User, UserRole
+from app.schemas.camera import CameraCreate, CameraRead, CameraUpdate
+from app.schemas.common import PaginatedResponse
+from app.services import camera_service
+
+router = APIRouter(prefix="/cameras", tags=["cameras"])
+
+_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
+
+
+@router.post("", response_model=CameraRead, status_code=status.HTTP_201_CREATED)
+async def create_camera(
+    payload: CameraCreate,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.create_camera(db, request, current_user, payload)
+
+
+@router.get("", response_model=PaginatedResponse[CameraRead])
+async def list_cameras(
+    village_id: uuid.UUID | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.list_cameras(db, current_user, village_id, page, page_size)
+
+
+@router.get("/{camera_id}", response_model=CameraRead)
+async def get_camera(
+    camera_id: uuid.UUID,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.get_camera(db, current_user, camera_id)
+
+
+@router.patch("/{camera_id}", response_model=CameraRead)
+async def update_camera(
+    camera_id: uuid.UUID,
+    payload: CameraUpdate,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.update_camera(db, request, current_user, camera_id, payload)
+
+
+@router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_camera(
+    camera_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    await camera_service.delete_camera(db, request, current_user, camera_id)

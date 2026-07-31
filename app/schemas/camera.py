@@ -31,3 +31,4 @@ class CameraRead(BaseModel):
     long: float
     stream_url: str
     created_at: datetime
+    is_active: bool

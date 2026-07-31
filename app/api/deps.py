@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User, UserRole
+from app.models.group import Group
 
 settings = get_settings()
 
@@ -31,15 +32,22 @@ async def get_current_user(
             headers=_UNAUTHORIZED_HEADERS,
         )
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    result = await db.execute(
+        select(User, Group.is_active.label("village_is_active"))
+        .outerjoin(Group, User.village_id == Group.id)
+        .where(User.id == user_id)
+    )
+    row = result.one_or_none()
 
-    if user is None:
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers=_UNAUTHORIZED_HEADERS,
         )
+
+    user, village_is_active = row
+
 
     if not user.is_active:
         raise HTTPException(
@@ -52,6 +60,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is not verified",
+            headers=_UNAUTHORIZED_HEADERS,
+        )
+    
+    if user.role != UserRole.SUPERADMIN and not village_is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Village is inactive",
             headers=_UNAUTHORIZED_HEADERS,
         )
 

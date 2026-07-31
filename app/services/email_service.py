@@ -5,7 +5,6 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-
 def _send_email(to_email: str, subject: str, body: str) -> None:
     message = EmailMessage()
     message["From"] = settings.smtp_from_email

@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime, timedelta, timezone
-
 from fastapi import HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
@@ -20,6 +17,8 @@ from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.verify import Verify, VerifyType
 from app.services import audit_service, email_service
+from app.models.group import Group
+from app.models.user import User, UserRole
 
 settings = get_settings()
 
@@ -41,12 +40,19 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
 
+    village_is_active = True
+    if user.role != UserRole.SUPERADMIN:
+        village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))
+        village_is_active = bool(village_result.scalar_one_or_none())
+
     if (
         user.hashpassword is None
         or not user.is_active
         or not user.is_verify
+        or not village_is_active
         or not verify_password(password, user.hashpassword)
     ):
+        
         await audit_service.log_action(
             db,
             request,
