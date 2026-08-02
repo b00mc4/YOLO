@@ -166,7 +166,7 @@ async def create_verify_token(db: AsyncSession, user: User, verify_type: VerifyT
         expire_at=datetime.now(timezone.utc) + timedelta(hours=24),
     )
     db.add(verify_entry)
-    await db.commit()
+    await db.flush()
     return raw_token
 
 
@@ -178,6 +178,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
         return
 
     raw_token = await create_verify_token(db, user, VerifyType.PASSWORD_RESET)
+    await db.commit()
     await run_in_threadpool(email_service.send_set_password_email, user.email, raw_token)
 
 

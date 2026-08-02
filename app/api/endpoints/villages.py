@@ -6,7 +6,7 @@ from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
-from app.schemas.village import VillageCreate, VillageRead, VillageUpdate
+from app.schemas.village import VillageCreate, VillageDetailRead, VillageRead, VillageUpdate
 from app.services import village_service
 
 router = APIRouter(prefix="/villages", tags=["villages"])
@@ -34,13 +34,13 @@ async def list_villages(
     return await village_service.list_villages(db, is_active, search, page, page_size)
 
 
-@router.get("/{village_id}", response_model=VillageRead)
+@router.get("/{village_id}", response_model=VillageDetailRead)
 async def get_village(
     village_id: uuid.UUID,
-    current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPERADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await village_service.get_village(db, village_id)
+    return await village_service.get_village_detail(db, current_user, village_id)
 
 
 @router.patch("/{village_id}", response_model=VillageRead)

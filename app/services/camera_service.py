@@ -11,14 +11,12 @@ from app.schemas.camera import CameraCreate, CameraUpdate
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service
 
-
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
     result = await db.execute(select(Group).where(Group.id == village_id))
     village = result.scalar_one_or_none()
     if village is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Village not found")
     return village
-
 
 async def create_camera(
     db: AsyncSession,
@@ -55,7 +53,6 @@ async def create_camera(
     await db.refresh(camera)
     return camera
 
-
 async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> Camera:
     result = await db.execute(
         select(Camera).where(Camera.id == camera_id, Camera.is_active.is_(True))
@@ -67,7 +64,6 @@ async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID)
 
     verify_village_scope(current_user, camera.village_id)
     return camera
-
 
 async def list_cameras(
     db: AsyncSession,
@@ -95,7 +91,6 @@ async def list_cameras(
 
     return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
 
-
 async def update_camera(
     db: AsyncSession,
     request: Request,
@@ -120,7 +115,6 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
     return camera
-
 
 async def delete_camera(
     db: AsyncSession,

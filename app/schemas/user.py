@@ -12,11 +12,13 @@ class UserCreate(BaseModel):
     username: str
     fullname: str
     email: EmailStr
-    role: UserRole
+    role: UserRole | None = None
     village_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def check_village_matches_role(self) -> UserCreate:
+        if self.role is None:
+            return self
         if self.role == UserRole.SUPERADMIN and self.village_id is not None:
             raise ValueError("superadmin must not have a village_id")
         if self.role != UserRole.SUPERADMIN and self.village_id is None:

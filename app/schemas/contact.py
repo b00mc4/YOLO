@@ -72,3 +72,21 @@ class ContactRead(BaseModel):
     custom_label: str | None
     value: str
     created_at: datetime
+
+
+class UserContactSummary(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    fullname: str
+    village_id: uuid.UUID | None
+    village_name: str | None
+    contact_count: int
+
+
+class UserContactsDetail(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    fullname: str
+    village_id: uuid.UUID | None
+    village_name: str | None
+    contacts: list[ContactRead]

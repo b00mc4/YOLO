@@ -3,10 +3,13 @@ import uuid
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.camera import Camera
 from app.models.group import Group
-from app.models.user import User
+from app.models.user import User, UserRole
+from app.schemas.camera import CameraRead
 from app.schemas.common import PaginatedResponse
-from app.schemas.village import VillageCreate, VillageUpdate
+from app.schemas.user import UserRead
+from app.schemas.village import VillageCreate, VillageDetailRead, VillageUpdate
 from app.services import audit_service
 
 async def create_village(
@@ -40,6 +43,41 @@ async def get_village(db: AsyncSession, village_id: uuid.UUID) -> Group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Village not found")
 
     return village
+
+
+async def get_village_detail(
+    db: AsyncSession,
+    current_user: User,
+    village_id: uuid.UUID,
+) -> VillageDetailRead:
+    village = await get_village(db, village_id)
+
+    if current_user.role != UserRole.SUPERADMIN and current_user.village_id != village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to access this village",
+        )
+
+    camera_result = await db.execute(
+        select(Camera)
+        .where(Camera.village_id == village_id, Camera.is_active.is_(True))
+        .order_by(Camera.created_at.desc())
+    )
+    cameras = camera_result.scalars().all()
+
+    member_result = await db.execute(
+        select(User).where(User.village_id == village_id).order_by(User.created_at.desc())
+    )
+    members = member_result.scalars().all()
+
+    return VillageDetailRead(
+        id=village.id,
+        name=village.name,
+        is_active=village.is_active,
+        created_at=village.created_at,
+        cameras=[CameraRead.model_validate(camera) for camera in cameras],
+        members=[UserRead.model_validate(member) for member in members],
+    )
 
 
 async def list_villages(

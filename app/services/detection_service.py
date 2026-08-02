@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from pathlib import Path
-
 from fastapi import HTTPException, Request, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
 from app.models.camera import Camera

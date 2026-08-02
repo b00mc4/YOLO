@@ -4,10 +4,15 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.contact import ContactType
 from app.models.user import User
 from app.schemas.common import PaginatedResponse
-from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate
+from app.schemas.contact import (
+    ContactCreate,
+    ContactRead,
+    ContactUpdate,
+    UserContactSummary,
+    UserContactsDetail,
+)
 from app.services import contact_service
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -23,19 +28,27 @@ async def create_contact(
     return await contact_service.create_contact(db, request, current_user, payload)
 
 
-@router.get("", response_model=PaginatedResponse[ContactRead])
-async def list_contacts(
-    user_id: uuid.UUID | None = Query(default=None),
+@router.get("/users", response_model=PaginatedResponse[UserContactSummary])
+async def list_user_contact_summaries(
     village_id: uuid.UUID | None = Query(default=None),
-    content_type: ContactType | None = Query(default=None),
+    search: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await contact_service.list_contacts(
-        db, current_user, user_id, village_id, content_type, page, page_size
+    return await contact_service.list_user_contact_summaries(
+        db, current_user, village_id, search, page, page_size
     )
+
+
+@router.get("/users/{user_id}", response_model=UserContactsDetail)
+async def get_user_contacts_detail(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await contact_service.get_user_contacts_detail(db, current_user, user_id)
 
 
 @router.patch("/{contact_id}", response_model=ContactRead)

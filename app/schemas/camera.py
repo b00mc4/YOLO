@@ -19,6 +19,7 @@ class CameraUpdate(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     long: float | None = Field(default=None, ge=-180, le=180)
     stream_url: str | None = None
+    is_active: bool | None = None
 
 
 class CameraRead(BaseModel):

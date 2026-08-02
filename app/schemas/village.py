@@ -5,6 +5,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.camera import CameraRead
+from app.schemas.user import UserRead
+
 
 class VillageCreate(BaseModel):
     name: str
@@ -23,3 +26,8 @@ class VillageRead(BaseModel):
     name: str
     is_active: bool
     created_at: datetime
+
+
+class VillageDetailRead(VillageRead):
+    cameras: list[CameraRead]
+    members: list[UserRead]
