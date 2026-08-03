@@ -2,7 +2,7 @@ from __future__ import annotations
 import secrets
 import uuid
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,8 +94,21 @@ def verify_village_scope(user: User, target_village_id: uuid.UUID) -> None:
         )
 
 
-async def verify_api_key(api_key: str | None = Depends(api_key_scheme)) -> None:
+async def verify_api_key(
+    request: Request,
+    api_key: str | None = Depends(api_key_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> None:
     if api_key is None or not secrets.compare_digest(api_key, settings.api_key):
+        from app.services import audit_service
+
+        await audit_service.log_action(
+            db,
+            request,
+            action="api_key_rejected",
+            detail=f"invalid or missing API key on {request.method} {request.url.path}",
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",

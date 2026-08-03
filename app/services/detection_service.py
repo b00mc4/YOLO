@@ -93,18 +93,9 @@ async def _check_is_blacklisted(
     )
     return result.scalar_one_or_none() is not None
 
-
-async def _rollback_failed_detection(
-    db: AsyncSession,
-    car: Car,
-    written_paths: list[str],
-) -> None:
+async def _cleanup_written_images(written_paths: list[str]) -> None:
     for relative_path in written_paths:
         await storage_service.delete_detection_image(relative_path)
-
-    await db.delete(car)
-    await db.commit()
-
 
 async def create_detection(
     db: AsyncSession,
@@ -138,6 +129,19 @@ async def create_detection(
         db, camera.village_id, payload.license_plate, payload.province
     )
 
+    written_paths: list[str] = []
+    try:
+        await storage_service.write_detection_image(crop_path, crop_content)
+        written_paths.append(crop_path)
+        await storage_service.write_detection_image(full_path, full_content)
+        written_paths.append(full_path)
+    except OSError:
+        await _cleanup_written_images(written_paths)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store detection images",
+        )
+
     car = Car(
         event_id=payload.event_id,
         camera_id=camera.id,
@@ -160,22 +164,12 @@ async def create_detection(
             village_id=camera.village_id,
         )
 
-    await db.commit()
-    await db.refresh(car)
-
-    written_paths: list[str] = []
     try:
-        await storage_service.write_detection_image(crop_path, crop_content)
-        written_paths.append(crop_path)
-        await storage_service.write_detection_image(full_path, full_content)
-        written_paths.append(full_path)
-    except OSError:
-        await _rollback_failed_detection(db, car, written_paths)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to store detection images",
-        )
-
+        await db.commit()
+    except Exception:
+        await _cleanup_written_images(written_paths)
+        raise
+    await db.refresh(car)
     return _to_car_read(car, request)
 
 

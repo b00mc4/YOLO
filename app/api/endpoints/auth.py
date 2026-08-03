@@ -49,6 +49,7 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
+    """Login ธรรมดาทั่วไป"""
     user = await auth_service.authenticate_user(db, request, form_data.username, form_data.password)
     access_token, raw_refresh_token = await auth_service.issue_tokens(db, user)
     _set_refresh_cookie(response, raw_refresh_token)
@@ -61,6 +62,7 @@ async def refresh(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    """แลก Refresh TOken โดยใช้ Cookie"""
     raw_refresh_token = request.cookies.get(auth_service.REFRESH_TOKEN_COOKIE_NAME)
     if raw_refresh_token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
@@ -87,6 +89,7 @@ async def forgot_password(
     payload: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """ลืมรหัสผ่าน ส่งลิ้ง Token url ไปให้ User"""
     await auth_service.request_password_reset(db, payload.email)
 
 
@@ -95,6 +98,7 @@ async def set_password(
     payload: SetPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    """ต่อจาก endpoint forgot-password เอา token url มาใส่ในนี้ user สามารถตั้งรหัสผ่านเองได้"""
     await auth_service.set_password(db, payload.token, payload.new_password)
 
 
@@ -106,6 +110,7 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """อันนี้คือเปลี่ยนรหัสผ่านเองได้เมื่อ login เข้ามาแล้ว"""
     current_raw_refresh_token = request.cookies.get(auth_service.REFRESH_TOKEN_COOKIE_NAME)
     await auth_service.change_password(
         db=db,

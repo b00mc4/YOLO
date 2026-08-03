@@ -130,10 +130,10 @@ async def create_user(
         village_id=village_id,
     )
 
+    raw_token = await auth_service.create_verify_token(db, user, VerifyType.INITIAL_SETUP)
+
     await db.commit()
     await db.refresh(user)
-
-    raw_token = await auth_service.create_verify_token(db, user, VerifyType.INITIAL_SETUP)
     await run_in_threadpool(email_service.send_invite_email, user.email, raw_token)
 
     return await _to_user_detail(db, user)
@@ -172,6 +172,10 @@ async def list_users(
         page=page,
         page_size=page_size,
     )
+
+
+async def get_own_user_detail(db: AsyncSession, current_user: User) -> UserDetail:
+    return await _to_user_detail(db, current_user)
 
 
 async def get_user_detail(db: AsyncSession, current_user: User, user_id: uuid.UUID) -> UserDetail:

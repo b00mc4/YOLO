@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, verify_api_key
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.car import CarDetailRead, CarRead, DetectionCreate
@@ -22,6 +22,7 @@ router = APIRouter(prefix="/detections", tags=["detections"])
     "",
     response_model=CarRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_api_key)],
 )
 async def create_detection(
     request: Request,

@@ -1,12 +1,12 @@
 from __future__ import annotations
-
+import io
 import logging
 import uuid
 from pathlib import Path
-
 from fastapi import HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
-
+from PIL import Image, UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 _ALLOWED_CONTENT_TYPES = {
     "image/jpeg": "jpg",
     "image/png": "png",
+}
+
+_ALLOWED_PILLOW_FORMATS = {
+    "JPEG": "jpg",
+    "PNG": "png",
 }
 
 _EXTENSION_TO_CONTENT_TYPE = {
@@ -27,15 +32,12 @@ _MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
 _READ_CHUNK_SIZE_BYTES = 1024 * 1024
 
 
-def validate_image_content_type(upload: UploadFile) -> str:
-    extension = _ALLOWED_CONTENT_TYPES.get(upload.content_type)
-    if extension is None:
+def validate_image_content_type(upload: UploadFile) -> None:
+    if upload.content_type not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported image content type: {upload.content_type}",
         )
-    return extension
-
 
 async def _read_with_size_limit(upload: UploadFile) -> bytes:
     chunks: list[bytes] = []
@@ -52,10 +54,30 @@ async def _read_with_size_limit(upload: UploadFile) -> bytes:
 
     return b"".join(chunks)
 
+def _detect_image_extension(content: bytes) -> str:
+    try:
+        with Image.open(io.BytesIO(content)) as img:
+            detected_format = img.format
+            img.verify()
+    except (UnidentifiedImageError, DecompressionBombError, OSError, SyntaxError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or corrupted image file",
+        )
+ 
+    extension = _ALLOWED_PILLOW_FORMATS.get(detected_format)
+    if extension is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported image format: {detected_format}",
+        )
+ 
+    return extension
 
 async def read_and_validate_image(upload: UploadFile) -> tuple[bytes, str]:
-    extension = validate_image_content_type(upload)
+    validate_image_content_type(upload)
     content = await _read_with_size_limit(upload)
+    extension = await run_in_threadpool(_detect_image_extension, content)
     return content, extension
 
 

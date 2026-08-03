@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import Form
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class DetectionCreate(BaseModel):
@@ -14,6 +14,11 @@ class DetectionCreate(BaseModel):
     province: str
     color: str
     time_detect: datetime
+
+    @field_validator("license_plate", "province")
+    @classmethod
+    def normalize(cls, v: str) -> str:
+        return v.strip().upper()
 
     @classmethod
     def as_form(

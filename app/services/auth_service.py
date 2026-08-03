@@ -7,6 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.security import (
+    _DUMMY_PASSWORD_HASH as hash_security_dummy,
     create_access_token,
     generate_secure_token,
     hash_password,
@@ -30,36 +31,39 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
 
-    if user is None:
-        await audit_service.log_action(
-            db,
-            request,
-            action="login_failed",
-            detail=f"unknown username: {username}",
-        )
-        await db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
-
     village_is_active = True
-    if user.role != UserRole.SUPERADMIN:
+    if user is not None and user.role != UserRole.SUPERADMIN:
         village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))
         village_is_active = bool(village_result.scalar_one_or_none())
 
-    if (
-        user.hashpassword is None
+    hash_to_check = (
+        user.hashpassword
+        if (user is not None and user.hashpassword is not None)
+        else hash_security_dummy
+    )
+    password_ok = verify_password(password, hash_to_check)
+
+    login_failed = (
+        user is None
+        or user.hashpassword is None
         or not user.is_active
         or not user.is_verify
         or not village_is_active
-        or not verify_password(password, user.hashpassword)
-    ):
-        
+        or not password_ok
+    )
+
+    if login_failed:
         await audit_service.log_action(
             db,
             request,
             action="login_failed",
-            detail=f"failed login attempt for username: {username}",
-            user_id=user.id,
-            village_id=user.village_id,
+            detail=(
+                f"unknown username: {username}"
+                if user is None
+                else f"failed login attempt for username: {username}"
+            ),
+            user_id=user.id if user is not None else None,
+            village_id=user.village_id if user is not None else None,
         )
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)

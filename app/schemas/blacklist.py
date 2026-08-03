@@ -1,9 +1,7 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class BlacklistCreate(BaseModel):
@@ -11,6 +9,11 @@ class BlacklistCreate(BaseModel):
     license_plate: str
     province: str
     reason: str
+
+    @field_validator("license_plate", "province")
+    @classmethod
+    def normalize(cls, v: str) -> str:
+        return v.strip().upper()
 
 
 class BlacklistUpdate(BaseModel):

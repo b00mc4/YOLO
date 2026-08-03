@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
@@ -41,6 +41,20 @@ async def list_users(
     return await user_service.list_users(
         db, current_user, village_id, role, is_active, search, page, page_size
     )
+
+
+@router.get("/me", response_model=UserDetail)
+async def get_my_detail(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    ดูข้อมูลของบัญชีตัวเอง
+
+    ใช้ได้ทุก role ที่ login สำเร็จ (รวมถึง role `user` เช่นยามที่ไม่มีสิทธิ์
+    เรียก endpoint อื่นในกลุ่มนี้) เพราะเช็คแค่ตัวตนจาก token ไม่เช็ค role
+    """
+    return await user_service.get_own_user_detail(db, current_user)
 
 
 @router.get("/{user_id}", response_model=UserDetail)

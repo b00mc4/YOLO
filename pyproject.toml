@@ -24,6 +24,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     # Email (verify / reset password links)
     "aiosmtplib>=3.0.2",
+    "pillow>=10.4.0",
 ]
 
 [project.optional-dependencies]

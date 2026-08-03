@@ -12,6 +12,7 @@ from app.core.config import get_settings
 settings = get_settings()
 _password_hasher = PasswordHasher()
 
+_DUMMY_PASSWORD_HASH = _password_hasher.hash(secrets.token_urlsafe(32))
 
 def hash_password(password: str):
     return _password_hasher.hash(password)
