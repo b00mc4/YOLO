@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
@@ -8,12 +9,16 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import verify_village_scope
+from app.core.security import hash_token
 from app.models.contact import Contact
 from app.models.user import User, UserRole
-from app.models.verify import VerifyType
+from app.models.verify import Verify, VerifyType
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserDetail, UserStatusUpdate, UserSummary
+from app.schemas.contact import ContactRead
+from app.schemas.user import UserCreate, UserDetail, UserMeDetail, UserStatusUpdate, UserSummary
 from app.services import audit_service, auth_service, email_service, village_service
+
+_RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
@@ -87,6 +92,26 @@ async def _to_user_detail(db: AsyncSession, user: User) -> UserDetail:
         is_verify=user.is_verify,
         created_at=user.created_at,
         contact_count=contact_count,
+    )
+
+
+async def _to_user_me_detail(db: AsyncSession, user: User) -> UserMeDetail:
+    contacts_result = await db.execute(
+        select(Contact).where(Contact.user_id == user.id).order_by(Contact.created_at.desc())
+    )
+    contacts = contacts_result.scalars().all()
+
+    return UserMeDetail(
+        id=user.id,
+        username=user.username,
+        fullname=user.fullname,
+        email=user.email,
+        role=user.role,
+        village_id=user.village_id,
+        is_active=user.is_active,
+        is_verify=user.is_verify,
+        created_at=user.created_at,
+        contacts=[ContactRead.model_validate(contact) for contact in contacts],
     )
 
 
@@ -174,8 +199,8 @@ async def list_users(
     )
 
 
-async def get_own_user_detail(db: AsyncSession, current_user: User) -> UserDetail:
-    return await _to_user_detail(db, current_user)
+async def get_own_user_detail(db: AsyncSession, current_user: User) -> UserMeDetail:
+    return await _to_user_me_detail(db, current_user)
 
 
 async def get_user_detail(db: AsyncSession, current_user: User, user_id: uuid.UUID) -> UserDetail:
@@ -212,6 +237,63 @@ async def set_user_active_status(
         request,
         action=action,
         detail=detail,
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    await db.refresh(target)
+    return await _to_user_detail(db, target)
+
+
+async def resend_invite(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+) -> UserDetail:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    if target.is_verify:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is already verified",
+        )
+
+    last_sent_result = await db.execute(
+        select(Verify.created_at)
+        .where(Verify.user_id == target.id, Verify.type == VerifyType.INITIAL_SETUP)
+        .order_by(Verify.created_at.desc())
+        .limit(1)
+    )
+    last_sent_at = last_sent_result.scalar_one_or_none()
+    if last_sent_at is not None and datetime.now(timezone.utc) - last_sent_at < _RESEND_INVITE_COOLDOWN:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting another invite",
+        )
+
+    raw_token = await auth_service.create_verify_token(db, target, VerifyType.INITIAL_SETUP)
+
+    try:
+        await run_in_threadpool(email_service.send_invite_email, target.email, raw_token)
+    except Exception:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send invite email",
+        )
+
+    await auth_service.invalidate_pending_verify_tokens(
+        db, target.id, VerifyType.INITIAL_SETUP, exclude_token_hash=hash_token(raw_token)
+    )
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_invite_resent",
+        detail=f"resent invite email: {target.username}",
         user_id=current_user.id,
         village_id=target.village_id,
     )

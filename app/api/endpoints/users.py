@@ -9,7 +9,7 @@ from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserDetail, UserStatusUpdate, UserSummary
+from app.schemas.user import UserCreate, UserDetail, UserMeDetail, UserStatusUpdate, UserSummary
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -43,7 +43,7 @@ async def list_users(
     )
 
 
-@router.get("/me", response_model=UserDetail)
+@router.get("/me", response_model=UserMeDetail)
 async def get_my_detail(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -75,3 +75,13 @@ async def update_user_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.set_user_active_status(db, request, current_user, user_id, payload)
+
+
+@router.post("/{user_id}/resend-invite", response_model=UserDetail)
+async def resend_invite(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await user_service.resend_invite(db, request, current_user, user_id)

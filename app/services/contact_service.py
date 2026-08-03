@@ -1,17 +1,15 @@
 from __future__ import annotations
-
 import uuid
-
 from fastapi import HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models.contact import Contact, ContactType
 from app.models.group import Group
 from app.models.user import User, UserRole
 from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, UserContactsDetail
 from app.services import audit_service
 
+_MAX_CONTACTS_PER_USER = 10
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -113,6 +111,15 @@ async def create_contact(
     payload: ContactCreate,
 ) -> ContactRead:
     target_user = await _resolve_target_user(db, current_user, payload.user_id)
+
+    count_result = await db.execute(
+        select(func.count()).select_from(Contact).where(Contact.user_id == target_user.id)
+    )
+    if count_result.scalar_one() >= _MAX_CONTACTS_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User already has the maximum of {_MAX_CONTACTS_PER_USER} contacts",
+        )
 
     contact = Contact(
         user_id=target_user.id,

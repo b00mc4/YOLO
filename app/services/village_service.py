@@ -82,6 +82,7 @@ async def get_village_detail(
 
 async def list_villages(
     db: AsyncSession,
+    current_user: User,
     is_active_filter: bool | None,
     search: str | None,
     page: int,
@@ -89,6 +90,10 @@ async def list_villages(
 ) -> PaginatedResponse[Group]:
     stmt = select(Group)
     count_stmt = select(func.count()).select_from(Group)
+
+    if current_user.role != UserRole.SUPERADMIN:
+        stmt = stmt.where(Group.id == current_user.village_id)
+        count_stmt = count_stmt.where(Group.id == current_user.village_id)
 
     if is_active_filter is not None:
         stmt = stmt.where(Group.is_active == is_active_filter)

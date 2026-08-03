@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
 
 from app.models.user import UserRole
+from app.schemas.contact import ContactRead
 
 
 class UserCreate(BaseModel):
@@ -64,3 +65,16 @@ class UserDetail(BaseModel):
     is_verify: bool
     created_at: datetime
     contact_count: int
+
+
+class UserMeDetail(BaseModel):
+    id: uuid.UUID
+    username: str
+    fullname: str
+    email: EmailStr
+    role: UserRole
+    village_id: uuid.UUID | None
+    is_active: bool
+    is_verify: bool
+    created_at: datetime
+    contacts: list[ContactRead]

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.security import (
@@ -172,6 +172,22 @@ async def create_verify_token(db: AsyncSession, user: User, verify_type: VerifyT
     db.add(verify_entry)
     await db.flush()
     return raw_token
+
+
+async def invalidate_pending_verify_tokens(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    verify_type: VerifyType,
+    exclude_token_hash: str | None = None,
+) -> None:
+    stmt = (
+        update(Verify)
+        .where(Verify.user_id == user_id, Verify.type == verify_type, Verify.used.is_(False))
+        .values(used=True)
+    )
+    if exclude_token_hash is not None:
+        stmt = stmt.where(Verify.token_hash != exclude_token_hash)
+    await db.execute(stmt)
 
 
 async def request_password_reset(db: AsyncSession, email: str) -> None:

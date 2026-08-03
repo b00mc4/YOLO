@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
@@ -28,16 +28,16 @@ async def list_villages(
     search: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await village_service.list_villages(db, is_active, search, page, page_size)
+    return await village_service.list_villages(db,current_user, is_active, search, page, page_size)
 
 
 @router.get("/{village_id}", response_model=VillageDetailRead)
 async def get_village(
     village_id: uuid.UUID,
-    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPERADMIN)),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     return await village_service.get_village_detail(db, current_user, village_id)
