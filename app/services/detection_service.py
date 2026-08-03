@@ -13,7 +13,7 @@ from app.models.group import Group
 from app.models.user import User, UserRole
 from app.schemas.car import CameraSummary, CarDetailRead, CarRead, DetectionCreate
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service, storage_service
+from app.services import audit_service, sse_service, storage_service
 
 
 def _to_car_read(car: Car, request: Request) -> CarRead:
@@ -97,6 +97,40 @@ async def _cleanup_written_images(written_paths: list[str]) -> None:
     for relative_path in written_paths:
         await storage_service.delete_detection_image(relative_path)
 
+
+async def _publish_blacklist_alert(db: AsyncSession, request: Request, camera: Camera, car: Car) -> None:
+    village_result = await db.execute(select(Group.name).where(Group.id == camera.village_id))
+    village_name = village_result.scalar_one()
+
+    await sse_service.publish(
+        camera.village_id,
+        "blacklist_alert",
+        {
+            "detection_id": car.id,
+            "license_plate": car.license_plate,
+            "province": car.province,
+            "color": car.color,
+            "time_detect": car.time_detect,
+            "camera": {
+                "id": camera.id,
+                "name": camera.name,
+                "lat": camera.lat,
+                "long": camera.long,
+            },
+            "village": {
+                "id": camera.village_id,
+                "name": village_name,
+            },
+            "image_crop": str(
+                request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+            ),
+            "image_full": str(
+                request.url_for("get_detection_image", detection_id=car.id, variant="full")
+            ),
+        },
+    )
+
+
 async def create_detection(
     db: AsyncSession,
     request: Request,
@@ -170,6 +204,10 @@ async def create_detection(
         await _cleanup_written_images(written_paths)
         raise
     await db.refresh(car)
+
+    if is_blacklist:
+        await _publish_blacklist_alert(db, request, camera, car)
+
     return _to_car_read(car, request)
 
 
