@@ -1,7 +1,8 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from fastapi import HTTPException, Request, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,9 +12,18 @@ from app.models.camera import Camera
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.car import CameraSummary, CarDetailRead, CarRead, DetectionCreate
+from app.schemas.car import (
+    CameraSummary,
+    CarDetailRead,
+    CarRead,
+    DetectionCreate,
+    DetectionDashboardRead,
+    RepeatedPlateEntry,
+)
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, sse_service, storage_service
+
+_BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 
 
 def _to_car_read(car: Car, request: Request) -> CarRead:
@@ -98,37 +108,27 @@ async def _cleanup_written_images(written_paths: list[str]) -> None:
         await storage_service.delete_detection_image(relative_path)
 
 
-async def _publish_blacklist_alert(db: AsyncSession, request: Request, camera: Camera, car: Car) -> None:
-    village_result = await db.execute(select(Group.name).where(Group.id == camera.village_id))
-    village_name = village_result.scalar_one()
-
-    await sse_service.publish(
-        camera.village_id,
-        "blacklist_alert",
-        {
-            "detection_id": car.id,
-            "license_plate": car.license_plate,
-            "province": car.province,
-            "color": car.color,
-            "time_detect": car.time_detect,
-            "camera": {
-                "id": camera.id,
-                "name": camera.name,
-                "lat": camera.lat,
-                "long": camera.long,
-            },
-            "village": {
-                "id": camera.village_id,
-                "name": village_name,
-            },
-            "image_crop": str(
-                request.url_for("get_detection_image", detection_id=car.id, variant="crop")
-            ),
-            "image_full": str(
-                request.url_for("get_detection_image", detection_id=car.id, variant="full")
-            ),
+def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -> dict:
+    return {
+        "detection_id": car.id,
+        "license_plate": car.license_plate,
+        "province": car.province,
+        "color": car.color,
+        "time_detect": car.time_detect,
+        "is_blacklist": car.is_blacklist,
+        "camera": {
+            "id": camera.id,
+            "name": camera.name,
+            "lat": camera.lat,
+            "long": camera.long,
         },
-    )
+        "image_crop": str(
+            request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+        ),
+        "image_full": str(
+            request.url_for("get_detection_image", detection_id=car.id, variant="full")
+        ),
+    }
 
 
 async def create_detection(
@@ -205,8 +205,10 @@ async def create_detection(
         raise
     await db.refresh(car)
 
+    event_payload = _build_detection_event_payload(request, camera, car)
+    await sse_service.publish(camera.village_id, "detection_created", event_payload)
     if is_blacklist:
-        await _publish_blacklist_alert(db, request, camera, car)
+        await sse_service.publish(camera.village_id, "blacklist_alert", event_payload)
 
     return _to_car_read(car, request)
 
@@ -311,3 +313,91 @@ async def get_detection_image_path(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found")
 
     return absolute_path, storage_service.guess_media_type(absolute_path)
+
+def _today_bangkok_bounds() -> tuple[datetime, datetime, datetime]:
+    now_bangkok = datetime.now(_BANGKOK_TZ)
+    start_of_day_bangkok = now_bangkok.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day_bangkok = start_of_day_bangkok + timedelta(days=1)
+    return (
+        start_of_day_bangkok,
+        start_of_day_bangkok.astimezone(timezone.utc),
+        end_of_day_bangkok.astimezone(timezone.utc),
+    )
+
+
+def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.UUID | None) -> list:
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is not None:
+            return [Camera.village_id == village_id_filter]
+        return []
+    return [Camera.village_id == current_user.village_id]
+
+
+async def get_today_dashboard(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    village_id: uuid.UUID | None,
+    latest_limit: int,
+) -> DetectionDashboardRead:
+    start_of_day_bangkok, start_utc, end_utc = _today_bangkok_bounds()
+    scope_filters = _build_dashboard_scope_filters(current_user, village_id)
+    base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
+
+    total_result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters)
+    )
+    total_detections_today = total_result.scalar_one()
+
+    unique_subquery = (
+        select(Car.license_plate, Car.province)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters)
+        .distinct()
+        .subquery()
+    )
+    unique_result = await db.execute(select(func.count()).select_from(unique_subquery))
+    unique_plates_today = unique_result.scalar_one()
+
+    blacklist_result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters, Car.is_blacklist.is_(True))
+    )
+    blacklist_detections_today = blacklist_result.scalar_one()
+
+    top_repeated_result = await db.execute(
+        select(Car.license_plate, Car.province, func.count())
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters)
+        .group_by(Car.license_plate, Car.province)
+        .having(func.count() > 1)
+        .order_by(func.count().desc())
+        .limit(10)
+    )
+    top_repeated_plates = [
+        RepeatedPlateEntry(license_plate=plate, province=province, count=count)
+        for plate, province, count in top_repeated_result.all()
+    ]
+
+    latest_result = await db.execute(
+        select(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters)
+        .order_by(Car.time_detect.desc())
+        .limit(latest_limit)
+    )
+    latest_detections = [_to_car_read(item, request) for item in latest_result.scalars().all()]
+
+    return DetectionDashboardRead(
+        date=start_of_day_bangkok.date(),
+        total_detections_today=total_detections_today,
+        unique_plates_today=unique_plates_today,
+        blacklist_detections_today=blacklist_detections_today,
+        top_repeated_plates=top_repeated_plates,
+        latest_detections=latest_detections,
+    )

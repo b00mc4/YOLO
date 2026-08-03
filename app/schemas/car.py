@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 import uuid
-from datetime import datetime
-
+from datetime import date, datetime
 from fastapi import Form
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -75,3 +73,17 @@ class CarDetailRead(BaseModel):
     is_blacklist: bool
     created_at: datetime
     camera: CameraSummary
+
+class RepeatedPlateEntry(BaseModel):
+    license_plate: str
+    province: str
+    count: int
+
+
+class DetectionDashboardRead(BaseModel):
+    date: date
+    total_detections_today: int
+    unique_plates_today: int
+    blacklist_detections_today: int
+    top_repeated_plates: list[RepeatedPlateEntry]
+    latest_detections: list[CarRead]

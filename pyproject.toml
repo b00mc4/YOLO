@@ -25,6 +25,7 @@ dependencies = [
     # Email (verify / reset password links)
     "aiosmtplib>=3.0.2",
     "pillow>=10.4.0",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

@@ -1,17 +1,14 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime
 from typing import Literal
-
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import get_current_user, verify_api_key
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.car import CarDetailRead, CarRead, DetectionCreate
+from app.schemas.car import CarDetailRead, CarRead, DetectionCreate, DetectionDashboardRead
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 
@@ -86,3 +83,15 @@ async def get_detection_image(
         db, current_user, detection_id, variant
     )
     return FileResponse(file_path, media_type=media_type)
+
+@router.get("/stats/today", response_model=DetectionDashboardRead)
+async def get_today_dashboard(
+    request: Request,
+    village_id: uuid.UUID | None = Query(default=None),
+    latest_limit: int = Query(default=10, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await detection_service.get_today_dashboard(
+        db, request, current_user, village_id, latest_limit
+    )
