@@ -9,7 +9,15 @@ from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserCreate, UserDetail, UserMeDetail, UserStatusUpdate, UserSummary
+from app.schemas.user import (
+    AdminResetPasswordRequest,
+    AdminResetPasswordResponse,
+    UserCreate,
+    UserDetail,
+    UserMeDetail,
+    UserStatusUpdate,
+    UserSummary,
+)
 from app.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -75,6 +83,21 @@ async def update_user_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.set_user_active_status(db, request, current_user, user_id, payload)
+
+
+@router.post("/{user_id}/reset-password", response_model=AdminResetPasswordResponse)
+async def reset_user_password(
+    user_id: uuid.UUID,
+    payload: AdminResetPasswordRequest,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    username = await user_service.reset_user_password(db, request, current_user, user_id, payload)
+    return AdminResetPasswordResponse(
+        detail=f"เปลี่ยนรหัสผ่านให้ {username} สำเร็จ",
+        username=username,
+    )
 
 
 @router.post("/{user_id}/resend-invite", response_model=UserDetail)

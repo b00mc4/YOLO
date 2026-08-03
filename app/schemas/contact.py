@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from app.models.contact import ContactType
+from app.models.user import UserRole
 
 
 def _normalize_content_type(value):
@@ -81,3 +82,13 @@ class UserContactsDetail(BaseModel):
     village_id: uuid.UUID | None
     village_name: str | None
     contacts: list[ContactRead]
+
+
+class ContactDirectoryEntry(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    fullname: str
+    role: UserRole
+    village_id: uuid.UUID | None
+    village_name: str | None
+    contact_count: int

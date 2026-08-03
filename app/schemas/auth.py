@@ -38,6 +38,10 @@ class SetPasswordRequest(BaseModel):
             raise ValueError("New password and confirm password do not match")
         return self
 
+class SetPasswordResponse(BaseModel):
+    detail: str
+    username: str
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 

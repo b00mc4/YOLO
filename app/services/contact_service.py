@@ -1,12 +1,19 @@
 from __future__ import annotations
 import uuid
 from fastapi import HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.contact import Contact, ContactType
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, UserContactsDetail
+from app.schemas.common import PaginatedResponse
+from app.schemas.contact import (
+    ContactCreate,
+    ContactDirectoryEntry,
+    ContactRead,
+    ContactUpdate,
+    UserContactsDetail,
+)
 from app.services import audit_service
 
 _MAX_CONTACTS_PER_USER = 10
@@ -174,6 +181,73 @@ async def get_user_contacts_detail(
         village_id=target_user.village_id,
         village_name=village_name,
         contacts=[ContactRead.model_validate(contact) for contact in contacts],
+    )
+
+
+def _build_directory_scope_filter(current_user: User, village_id_filter: uuid.UUID | None):
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is None:
+            return None
+        return or_(User.village_id == village_id_filter, User.role == UserRole.SUPERADMIN)
+    return or_(User.village_id == current_user.village_id, User.role == UserRole.SUPERADMIN)
+
+
+async def list_contact_directory(
+    db: AsyncSession,
+    current_user: User,
+    village_id_filter: uuid.UUID | None,
+    search: str | None,
+    page: int,
+    page_size: int,
+) -> PaginatedResponse[ContactDirectoryEntry]:
+    contact_count_subquery = (
+        select(func.count())
+        .select_from(Contact)
+        .where(Contact.user_id == User.id)
+        .scalar_subquery()
+    )
+
+    stmt = select(User, Group.name, contact_count_subquery.label("contact_count")).outerjoin(
+        Group, User.village_id == Group.id
+    )
+    count_stmt = select(func.count()).select_from(User)
+
+    scope_filter = _build_directory_scope_filter(current_user, village_id_filter)
+    if scope_filter is not None:
+        stmt = stmt.where(scope_filter)
+        count_stmt = count_stmt.where(scope_filter)
+
+    if search:
+        pattern = f"%{search}%"
+        search_filter = or_(User.fullname.ilike(pattern), User.username.ilike(pattern))
+        stmt = stmt.where(search_filter)
+        count_stmt = count_stmt.where(search_filter)
+
+    count_result = await db.execute(count_stmt)
+    total = count_result.scalar_one()
+
+    stmt = stmt.order_by(User.fullname).offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    items = [
+        ContactDirectoryEntry(
+            user_id=user.id,
+            username=user.username,
+            fullname=user.fullname,
+            role=user.role,
+            village_id=user.village_id,
+            village_name=village_name,
+            contact_count=contact_count,
+        )
+        for user, village_name, contact_count in rows
+    ]
+
+    return PaginatedResponse[ContactDirectoryEntry](
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
     )
 
 

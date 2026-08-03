@@ -202,7 +202,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
     await run_in_threadpool(email_service.send_set_password_email, user.email, raw_token)
 
 
-async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> None:
+async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> str:
     token_hash = hash_token(raw_token)
     result = await db.execute(select(Verify).where(Verify.token_hash == token_hash, Verify.used.is_(False)))
     verify_entry = result.scalar_one_or_none()
@@ -222,3 +222,5 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> N
 
     await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
+
+    return user.username

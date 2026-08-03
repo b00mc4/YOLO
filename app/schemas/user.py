@@ -1,13 +1,19 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime
-
-from pydantic import BaseModel, ConfigDict, EmailStr, model_validator
-
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
+import re
 
+def _validate_password_policy(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not re.search(r"[A-Za-z]", value):
+        raise ValueError("Password must contain at least one letter")
+    if not re.search(r"\d", value):
+        raise ValueError("Password must contain at least one digit")
+    return value
 
 class UserCreate(BaseModel):
     username: str
@@ -27,6 +33,27 @@ class UserCreate(BaseModel):
 
 class UserStatusUpdate(BaseModel):
     is_active: bool
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str
+    confirm_new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return _validate_password_policy(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> AdminResetPasswordRequest:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError("New password and confirm password do not match")
+        return self
+
+
+class AdminResetPasswordResponse(BaseModel):
+    detail: str
+    username: str
 
 
 class UserRead(BaseModel):

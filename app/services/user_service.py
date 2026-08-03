@@ -9,13 +9,20 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import verify_village_scope
-from app.core.security import hash_token
+from app.core.security import hash_password, hash_token
 from app.models.contact import Contact
 from app.models.user import User, UserRole
 from app.models.verify import Verify, VerifyType
 from app.schemas.common import PaginatedResponse
 from app.schemas.contact import ContactRead
-from app.schemas.user import UserCreate, UserDetail, UserMeDetail, UserStatusUpdate, UserSummary
+from app.schemas.user import (
+    AdminResetPasswordRequest,
+    UserCreate,
+    UserDetail,
+    UserMeDetail,
+    UserStatusUpdate,
+    UserSummary,
+)
 from app.services import audit_service, auth_service, email_service, village_service
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
@@ -44,6 +51,29 @@ def _verify_user_write_scope(current_user: User, target: User) -> None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed to manage users outside your village",
+            )
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+
+def _verify_password_reset_scope(current_user: User, target: User) -> None:
+    if target.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reset your own password here, use change-password instead",
+        )
+    if current_user.role == UserRole.SUPERADMIN:
+        if target.role == UserRole.SUPERADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot reset another superadmin's password",
+            )
+        return
+    if current_user.role == UserRole.ADMIN:
+        if target.role != UserRole.USER or target.village_id != current_user.village_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to reset this user's password",
             )
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
@@ -244,6 +274,39 @@ async def set_user_active_status(
     await db.commit()
     await db.refresh(target)
     return await _to_user_detail(db, target)
+
+
+async def reset_user_password(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+    payload: AdminResetPasswordRequest,
+) -> str:
+    target = await _get_user_or_404(db, user_id)
+    _verify_password_reset_scope(current_user, target)
+
+    if target.hashpassword is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account has not set a password yet, use resend-invite instead",
+        )
+
+    target.hashpassword = hash_password(payload.new_password)
+    await auth_service.revoke_all_refresh_tokens(db, target.id)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_password_reset",
+        detail=f"password reset for user: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    await db.refresh(target)
+    return target.username
 
 
 async def resend_invite(

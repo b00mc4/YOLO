@@ -13,6 +13,7 @@ from app.schemas.auth import (
     LoginResponse,
     MessageResponse,
     SetPasswordRequest,
+    SetPasswordResponse,
     TokenResponse,
 )
 from app.services import auth_service
@@ -93,13 +94,17 @@ async def forgot_password(
     await auth_service.request_password_reset(db, payload.email)
 
 
-@router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/set-password", response_model=SetPasswordResponse)
 async def set_password(
     payload: SetPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """ต่อจาก endpoint forgot-password เอา token url มาใส่ในนี้ user สามารถตั้งรหัสผ่านเองได้"""
-    await auth_service.set_password(db, payload.token, payload.new_password)
+    username = await auth_service.set_password(db, payload.token, payload.new_password)
+    return SetPasswordResponse(
+        detail=f"ยินดีด้วย คุณสมัครสำเร็จ สามารถเข้าสู่ระบบได้เลยโดยใช้ username: {username}",
+        username=username,
+    )
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
