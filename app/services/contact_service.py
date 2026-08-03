@@ -3,20 +3,13 @@ from __future__ import annotations
 import uuid
 
 from fastapi import HTTPException, Request, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contact import Contact, ContactType
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.common import PaginatedResponse
-from app.schemas.contact import (
-    ContactCreate,
-    ContactRead,
-    ContactUpdate,
-    UserContactSummary,
-    UserContactsDetail,
-)
+from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, UserContactsDetail
 from app.services import audit_service
 
 
@@ -141,83 +134,6 @@ async def create_contact(
     await db.commit()
     await db.refresh(contact)
     return ContactRead.model_validate(contact)
-
-
-def _build_user_directory_filters(
-    current_user: User,
-    village_id_filter: uuid.UUID | None,
-    search: str | None,
-) -> list:
-    filters = []
-
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id_filter is not None:
-            filters.append(User.village_id == village_id_filter)
-    else:
-        filters.append(
-            or_(User.village_id == current_user.village_id, User.role == UserRole.SUPERADMIN)
-        )
-
-    if search:
-        pattern = f"%{search}%"
-        filters.append(or_(User.fullname.ilike(pattern), User.username.ilike(pattern)))
-
-    return filters
-
-
-async def list_user_contact_summaries(
-    db: AsyncSession,
-    current_user: User,
-    village_id_filter: uuid.UUID | None,
-    search: str | None,
-    page: int,
-    page_size: int,
-) -> PaginatedResponse[UserContactSummary]:
-    filters = _build_user_directory_filters(current_user, village_id_filter, search)
-
-    count_result = await db.execute(
-        select(func.count()).select_from(User).where(*filters)
-    )
-    total = count_result.scalar_one()
-
-    stmt = (
-        select(
-            User.id,
-            User.username,
-            User.fullname,
-            User.village_id,
-            Group.name.label("village_name"),
-            func.count(Contact.id).label("contact_count"),
-        )
-        .outerjoin(Group, User.village_id == Group.id)
-        .outerjoin(Contact, Contact.user_id == User.id)
-        .where(*filters)
-        .group_by(User.id, User.username, User.fullname, User.village_id, Group.name)
-        .order_by(User.fullname)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    items = [
-        UserContactSummary(
-            user_id=row.id,
-            username=row.username,
-            fullname=row.fullname,
-            village_id=row.village_id,
-            village_name=row.village_name,
-            contact_count=row.contact_count,
-        )
-        for row in rows
-    ]
-
-    return PaginatedResponse[UserContactSummary](
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-    )
 
 
 async def get_user_contacts_detail(

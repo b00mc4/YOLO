@@ -74,15 +74,6 @@ class ContactRead(BaseModel):
     created_at: datetime
 
 
-class UserContactSummary(BaseModel):
-    user_id: uuid.UUID
-    username: str
-    fullname: str
-    village_id: uuid.UUID | None
-    village_name: str | None
-    contact_count: int
-
-
 class UserContactsDetail(BaseModel):
     user_id: uuid.UUID
     username: str

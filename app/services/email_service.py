@@ -25,3 +25,12 @@ def send_set_password_email(to_email: str, raw_token: str) -> None:
         subject="ตั้งรหัสผ่านบัญชีของคุณ",
         body=f"กรุณาคลิกลิงก์เพื่อตั้งรหัสผ่าน: {link}",
     )
+
+
+def send_invite_email(to_email: str, raw_token: str) -> None:
+    link = f"{settings.frontend_url}/set-password?token={raw_token}"
+    _send_email(
+        to_email=to_email,
+        subject="ยินดีต้อนรับเข้าสู่ระบบ Village Guard",
+        body=f"คุณได้รับเชิญให้เข้าใช้งานระบบ กรุณาคลิกลิงก์เพื่อตั้งรหัสผ่านและเริ่มใช้งานบัญชีของคุณ: {link}",
+    )

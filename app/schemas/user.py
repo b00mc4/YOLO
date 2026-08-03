@@ -12,13 +12,11 @@ class UserCreate(BaseModel):
     username: str
     fullname: str
     email: EmailStr
-    role: UserRole | None = None
+    role: UserRole
     village_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def check_village_matches_role(self) -> UserCreate:
-        if self.role is None:
-            return self
         if self.role == UserRole.SUPERADMIN and self.village_id is not None:
             raise ValueError("superadmin must not have a village_id")
         if self.role != UserRole.SUPERADMIN and self.village_id is None:
@@ -26,10 +24,8 @@ class UserCreate(BaseModel):
         return self
 
 
-class UserUpdate(BaseModel):
-    fullname: str | None = None
-    email: EmailStr | None = None
-    is_active: bool | None = None
+class UserStatusUpdate(BaseModel):
+    is_active: bool
 
 
 class UserRead(BaseModel):
@@ -44,3 +40,27 @@ class UserRead(BaseModel):
     is_active: bool
     is_verify: bool
     created_at: datetime
+
+
+class UserSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    role: UserRole
+    is_active: bool
+    is_verify: bool
+    created_at: datetime
+
+
+class UserDetail(BaseModel):
+    id: uuid.UUID
+    username: str
+    fullname: str
+    email: EmailStr
+    role: UserRole
+    village_id: uuid.UUID | None
+    is_active: bool
+    is_verify: bool
+    created_at: datetime
+    contact_count: int

@@ -1,18 +1,11 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.common import PaginatedResponse
-from app.schemas.contact import (
-    ContactCreate,
-    ContactRead,
-    ContactUpdate,
-    UserContactSummary,
-    UserContactsDetail,
-)
+from app.schemas.contact import ContactCreate, ContactRead, ContactUpdate, UserContactsDetail
 from app.services import contact_service
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -26,20 +19,6 @@ async def create_contact(
     db: AsyncSession = Depends(get_db),
 ):
     return await contact_service.create_contact(db, request, current_user, payload)
-
-
-@router.get("/users", response_model=PaginatedResponse[UserContactSummary])
-async def list_user_contact_summaries(
-    village_id: uuid.UUID | None = Query(default=None),
-    search: str | None = Query(default=None),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await contact_service.list_user_contact_summaries(
-        db, current_user, village_id, search, page, page_size
-    )
 
 
 @router.get("/users/{user_id}", response_model=UserContactsDetail)
