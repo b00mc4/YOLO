@@ -18,6 +18,8 @@ from app.schemas.car import (
     CarRead,
     DetectionCreate,
     DetectionDashboardRead,
+    DetectionEventCamera,
+    DetectionEventPayload,
     RepeatedPlateEntry,
 )
 from app.schemas.common import PaginatedResponse
@@ -108,27 +110,27 @@ async def _cleanup_written_images(written_paths: list[str]) -> None:
         await storage_service.delete_detection_image(relative_path)
 
 
-def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -> dict:
-    return {
-        "detection_id": car.id,
-        "license_plate": car.license_plate,
-        "province": car.province,
-        "color": car.color,
-        "time_detect": car.time_detect,
-        "is_blacklist": car.is_blacklist,
-        "camera": {
-            "id": camera.id,
-            "name": camera.name,
-            "lat": camera.lat,
-            "long": camera.long,
-        },
-        "image_crop": str(
+def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -> DetectionEventPayload:
+    return DetectionEventPayload(
+        detection_id=car.id,
+        license_plate=car.license_plate,
+        province=car.province,
+        color=car.color,
+        time_detect=car.time_detect,
+        is_blacklist=car.is_blacklist,
+        camera=DetectionEventCamera(
+            id=camera.id,
+            name=camera.name,
+            lat=camera.lat,
+            long=camera.long,
+        ),
+        image_crop=str(
             request.url_for("get_detection_image", detection_id=car.id, variant="crop")
         ),
-        "image_full": str(
+        image_full=str(
             request.url_for("get_detection_image", detection_id=car.id, variant="full")
         ),
-    }
+    )
 
 
 async def create_detection(
@@ -206,9 +208,10 @@ async def create_detection(
     await db.refresh(car)
 
     event_payload = _build_detection_event_payload(request, camera, car)
-    await sse_service.publish(camera.village_id, "detection_created", event_payload)
+    event_data = event_payload.model_dump(mode="json")
+    await sse_service.publish(camera.village_id, "detection_created", event_data)
     if is_blacklist:
-        await sse_service.publish(camera.village_id, "blacklist_alert", event_payload)
+        await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
 
     return _to_car_read(car, request)
 

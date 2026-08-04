@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.blacklist import BlacklistCreate, BlacklistRead, BlacklistUpdate
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import blacklist_service
 
 router = APIRouter(prefix="/blacklist", tags=["blacklist"])
@@ -51,7 +51,7 @@ async def update_blacklist_entry(
     return await blacklist_service.update_blacklist_entry(db, request, current_user, entry_id, payload)
 
 
-@router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{entry_id}", response_model=MessageResponse)
 async def delete_blacklist_entry(
     entry_id: uuid.UUID,
     request: Request,
@@ -59,3 +59,4 @@ async def delete_blacklist_entry(
     db: AsyncSession = Depends(get_db),
 ):
     await blacklist_service.delete_blacklist_entry(db, request, current_user, entry_id)
+    return MessageResponse(detail="Blacklist entry deleted successfully")

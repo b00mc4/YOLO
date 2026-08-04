@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.contact import (
     ContactCreate,
     ContactDirectoryEntry,
@@ -62,7 +62,7 @@ async def update_contact(
     return await contact_service.update_contact(db, request, current_user, contact_id, payload)
 
 
-@router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{contact_id}", response_model=MessageResponse)
 async def delete_contact(
     contact_id: uuid.UUID,
     request: Request,
@@ -70,3 +70,4 @@ async def delete_contact(
     db: AsyncSession = Depends(get_db),
 ):
     await contact_service.delete_contact(db, request, current_user, contact_id)
+    return MessageResponse(detail="Contact deleted successfully")

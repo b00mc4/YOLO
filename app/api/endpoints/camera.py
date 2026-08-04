@@ -1,15 +1,12 @@
 from __future__ import annotations
-
 import uuid
-
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.camera import CameraCreate, CameraRead, CameraUpdate
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import camera_service
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
@@ -58,7 +55,7 @@ async def update_camera(
     return await camera_service.update_camera(db, request, current_user, camera_id, payload)
 
 
-@router.delete("/{camera_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{camera_id}", response_model=MessageResponse)
 async def delete_camera(
     camera_id: uuid.UUID,
     request: Request,
@@ -66,3 +63,4 @@ async def delete_camera(
     db: AsyncSession = Depends(get_db),
 ):
     await camera_service.delete_camera(db, request, current_user, camera_id)
+    return MessageResponse(detail="Camera deleted successfully")

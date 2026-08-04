@@ -14,3 +14,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class MessageResponse(BaseModel):
+    detail: str

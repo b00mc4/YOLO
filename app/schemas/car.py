@@ -87,3 +87,22 @@ class DetectionDashboardRead(BaseModel):
     blacklist_detections_today: int
     top_repeated_plates: list[RepeatedPlateEntry]
     latest_detections: list[CarRead]
+
+
+class DetectionEventCamera(BaseModel):
+    id: uuid.UUID
+    name: str
+    lat: float
+    long: float
+
+
+class DetectionEventPayload(BaseModel):
+    detection_id: uuid.UUID
+    license_plate: str
+    province: str
+    color: str
+    time_detect: datetime
+    is_blacklist: bool
+    camera: DetectionEventCamera
+    image_crop: str
+    image_full: str

@@ -3,9 +3,6 @@ import re
 from pydantic import BaseModel, EmailStr, field_validator, model_validator
 from app.schemas.user import UserRead
 
-class MessageResponse(BaseModel):
-    detail: str
-
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

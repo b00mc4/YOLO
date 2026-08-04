@@ -11,11 +11,11 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginResponse,
-    MessageResponse,
     SetPasswordRequest,
     SetPasswordResponse,
     TokenResponse,
 )
+from app.schemas.common import MessageResponse
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -73,7 +73,7 @@ async def refresh(
     return TokenResponse(access_token=access_token)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", response_model=MessageResponse)
 async def logout(
     request: Request,
     response: Response,
@@ -83,6 +83,7 @@ async def logout(
     if raw_refresh_token is not None:
         await auth_service.revoke_refresh_token(db, raw_refresh_token)
     _clear_refresh_cookie(response)
+    return MessageResponse(detail="Logged out successfully")
 
 
 @router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
@@ -107,7 +108,7 @@ async def set_password(
     )
 
 
-@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", response_model=MessageResponse)
 async def change_password(
     payload: ChangePasswordRequest,
     request: Request,
