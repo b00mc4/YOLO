@@ -13,7 +13,7 @@ from app.services import sse_service
 
 router = APIRouter(prefix="/sse", tags=["sse"])
 
-_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.USER)
+_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.USER, UserRole.SUPERADMIN)
 _PING_INTERVAL_SECONDS = 15
 
 

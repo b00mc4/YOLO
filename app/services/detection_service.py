@@ -19,7 +19,9 @@ from app.schemas.car import (
     DetectionCreate,
     DetectionDashboardRead,
     DetectionEventCamera,
+    DetectionEventCameraGlobal,
     DetectionEventPayload,
+    DetectionEventPayloadGlobal,
     RepeatedPlateEntry,
 )
 from app.schemas.common import PaginatedResponse
@@ -78,6 +80,11 @@ async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
     camera = result.scalar_one_or_none()
     if camera is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+    if not camera.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Camera is inactive and cannot receive detections",
+        )
     return camera
 
 
@@ -123,6 +130,32 @@ def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -
             name=camera.name,
             lat=camera.lat,
             long=camera.long,
+        ),
+        image_crop=str(
+            request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+        ),
+        image_full=str(
+            request.url_for("get_detection_image", detection_id=car.id, variant="full")
+        ),
+    )
+
+
+def _build_global_detection_event_payload(
+    request: Request, camera: Camera, car: Car
+) -> DetectionEventPayloadGlobal:
+    return DetectionEventPayloadGlobal(
+        detection_id=car.id,
+        license_plate=car.license_plate,
+        province=car.province,
+        color=car.color,
+        time_detect=car.time_detect,
+        is_blacklist=car.is_blacklist,
+        camera=DetectionEventCameraGlobal(
+            id=camera.id,
+            name=camera.name,
+            lat=camera.lat,
+            long=camera.long,
+            village_id=camera.village_id,
         ),
         image_crop=str(
             request.url_for("get_detection_image", detection_id=car.id, variant="crop")
@@ -212,6 +245,9 @@ async def create_detection(
     await sse_service.publish(camera.village_id, "detection_created", event_data)
     if is_blacklist:
         await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
+
+    global_payload = _build_global_detection_event_payload(request, camera, car)
+    await sse_service.publish_global("detection_created", global_payload.model_dump(mode="json"))
 
     return _to_car_read(car, request)
 

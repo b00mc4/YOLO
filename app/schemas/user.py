@@ -105,3 +105,11 @@ class UserMeDetail(BaseModel):
     is_verify: bool
     created_at: datetime
     contacts: list[ContactRead]
+
+class UserRegister(BaseModel):
+    id: uuid.UUID
+    username: str
+    role: UserRole
+    village_id: uuid.UUID | None
+    created_at: datetime
+    invite_email_sent: bool = True

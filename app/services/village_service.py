@@ -6,10 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.camera import Camera
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.camera import CameraRead
+from app.schemas.camera import CameraBasicRead
 from app.schemas.common import PaginatedResponse
-from app.schemas.user import UserRead
-from app.schemas.village import VillageCreate, VillageDetailRead, VillageUpdate
+from app.schemas.village import VillageCreate, VillageDetailRead, VillageMemberSummary, VillageUpdate
 from app.services import audit_service
 
 async def create_village(
@@ -75,8 +74,8 @@ async def get_village_detail(
         name=village.name,
         is_active=village.is_active,
         created_at=village.created_at,
-        cameras=[CameraRead.model_validate(camera) for camera in cameras],
-        members=[UserRead.model_validate(member) for member in members],
+        cameras=[CameraBasicRead.model_validate(camera) for camera in cameras],
+        members=[VillageMemberSummary.model_validate(member) for member in members],
     )
 
 

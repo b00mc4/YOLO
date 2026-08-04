@@ -106,3 +106,10 @@ class DetectionEventPayload(BaseModel):
     camera: DetectionEventCamera
     image_crop: str
     image_full: str
+
+class DetectionEventCameraGlobal(DetectionEventCamera):
+    village_id: uuid.UUID
+ 
+ 
+class DetectionEventPayloadGlobal(DetectionEventPayload):
+    camera: DetectionEventCameraGlobal

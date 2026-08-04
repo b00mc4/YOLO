@@ -109,6 +109,14 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
+    village_is_active = True
+    if user.role != UserRole.SUPERADMIN:
+        village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))
+        village_is_active = bool(village_result.scalar_one_or_none())
+
+    if not village_is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
     await db.delete(stored_token)
     access_token, new_raw_refresh_token = await issue_tokens(db, user)
     return access_token, new_raw_refresh_token
@@ -198,6 +206,9 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
         return
 
     raw_token = await create_verify_token(db, user, VerifyType.PASSWORD_RESET)
+    await invalidate_pending_verify_tokens(
+        db, user.id, VerifyType.PASSWORD_RESET, exclude_token_hash=hash_token(raw_token)
+    )
     await db.commit()
     await run_in_threadpool(email_service.send_set_password_email, user.email, raw_token)
 
@@ -220,6 +231,9 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
     user.is_verify = True
     verify_entry.used = True
 
+    await invalidate_pending_verify_tokens(
+        db, user.id, verify_entry.type, exclude_token_hash=token_hash
+    )
     await revoke_all_refresh_tokens(db, user.id)
     await db.commit()
 

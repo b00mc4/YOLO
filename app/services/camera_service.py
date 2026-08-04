@@ -54,9 +54,7 @@ async def create_camera(
     return camera
 
 async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> Camera:
-    result = await db.execute(
-        select(Camera).where(Camera.id == camera_id, Camera.is_active.is_(True))
-    )
+    result = await db.execute(select(Camera).where(Camera.id == camera_id))
     camera = result.scalar_one_or_none()
 
     if camera is None:
@@ -69,11 +67,12 @@ async def list_cameras(
     db: AsyncSession,
     current_user: User,
     village_id_filter: uuid.UUID | None,
+    is_active_filter: bool | None,
     page: int,
     page_size: int,
 ) -> PaginatedResponse[Camera]:
-    stmt = select(Camera).where(Camera.is_active.is_(True))
-    count_stmt = select(func.count()).select_from(Camera).where(Camera.is_active.is_(True))
+    stmt = select(Camera)
+    count_stmt = select(func.count()).select_from(Camera)
 
     if current_user.role == UserRole.ADMIN:
         stmt = stmt.where(Camera.village_id == current_user.village_id)
@@ -81,6 +80,10 @@ async def list_cameras(
     elif village_id_filter is not None:
         stmt = stmt.where(Camera.village_id == village_id_filter)
         count_stmt = count_stmt.where(Camera.village_id == village_id_filter)
+
+    if is_active_filter is not None:
+        stmt = stmt.where(Camera.is_active == is_active_filter)
+        count_stmt = count_stmt.where(Camera.is_active == is_active_filter)
 
     total_result = await db.execute(count_stmt)
     total = total_result.scalar_one()
@@ -123,6 +126,10 @@ async def delete_camera(
     camera_id: uuid.UUID,
 ) -> None:
     camera = await get_camera(db, current_user, camera_id)
+
+    if not camera.is_active:
+        return
+
     camera.is_active = False
 
     await audit_service.log_action(

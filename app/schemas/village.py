@@ -1,17 +1,13 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
-
-from app.schemas.camera import CameraRead
-from app.schemas.user import UserRead
+from app.models.user import UserRole
+from app.schemas.camera import CameraBasicRead
 
 
 class VillageCreate(BaseModel):
     name: str
-    is_active: bool = True
 
 
 class VillageUpdate(BaseModel):
@@ -27,7 +23,15 @@ class VillageRead(BaseModel):
     is_active: bool
     created_at: datetime
 
+class VillageMemberSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    fullname: str
+    role: UserRole
+    is_active: bool
 
 class VillageDetailRead(VillageRead):
-    cameras: list[CameraRead]
-    members: list[UserRead]
+    cameras: list[CameraBasicRead]
+    members: list[VillageMemberSummary]

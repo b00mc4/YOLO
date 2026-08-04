@@ -17,6 +17,7 @@ from app.schemas.user import (
     UserMeDetail,
     UserStatusUpdate,
     UserSummary,
+    UserRegister
 )
 from app.services import user_service
 
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
 
 
-@router.post("", response_model=UserDetail, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserRegister, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: UserCreate,
     request: Request,

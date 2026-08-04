@@ -27,12 +27,13 @@ async def create_camera(
 @router.get("", response_model=PaginatedResponse[CameraRead])
 async def list_cameras(
     village_id: uuid.UUID | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=10, ge=1, le=100),
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await camera_service.list_cameras(db, current_user, village_id, page, page_size)
+    return await camera_service.list_cameras(db, current_user, village_id, is_active, page, page_size)
 
 
 @router.get("/{camera_id}", response_model=CameraRead)

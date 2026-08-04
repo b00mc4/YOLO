@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 import uuid
 from datetime import datetime, timedelta, timezone
-
 from fastapi import HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import verify_village_scope
 from app.core.security import hash_password, hash_token
 from app.models.contact import Contact
@@ -22,9 +19,13 @@ from app.schemas.user import (
     UserMeDetail,
     UserStatusUpdate,
     UserSummary,
+    UserRegister
 )
 from app.services import audit_service, auth_service, email_service, village_service
+import logging
 
+
+logger = logging.getLogger(__name__)
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 
 
@@ -150,7 +151,7 @@ async def create_user(
     request: Request,
     current_user: User,
     payload: UserCreate,
-) -> UserDetail:
+) -> UserRegister:
     if current_user.role == UserRole.ADMIN:
         if payload.role == UserRole.SUPERADMIN:
             raise HTTPException(
@@ -189,9 +190,15 @@ async def create_user(
 
     await db.commit()
     await db.refresh(user)
-    await run_in_threadpool(email_service.send_invite_email, user.email, raw_token)
 
-    return await _to_user_detail(db, user)
+    invite_email_sent = True
+    try:
+        await run_in_threadpool(email_service.send_invite_email, user.email, raw_token)
+    except Exception:
+        invite_email_sent = False
+        logger.warning("Failed to send invite email to new user: %s", user.username)
+
+    return await _to_user_detail(db, user, invite_email_sent=invite_email_sent)
 
 
 async def list_users(
