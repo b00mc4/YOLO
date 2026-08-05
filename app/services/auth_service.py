@@ -21,6 +21,7 @@ from app.services import audit_service, email_service
 from app.models.group import Group
 from app.models.user import User, UserRole
 from app.core.rate_limit import get_rate_limiter
+from app.core.account_lockout import AccountLocked, get_account_locker
 
 settings = get_settings()
 
@@ -32,7 +33,22 @@ _LOGIN_USERNAME_LIMIT = 50
 _LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
 
 async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str):
-    rate_limit_key = f"login:username:{username.strip().lower()}"
+    normalized_username = username.strip().lower()
+    rate_limit_key = f"login:username:{normalized_username}"
+    locker_key = normalized_username
+
+    try:
+        get_account_locker().check_locked(locker_key)
+    except AccountLocked:
+        await audit_service.log_action(
+            db,
+            request,
+            action="login_blocked_locked",
+            detail=f"login attempt blocked, account locked for username: {username}",
+        )
+        await db.commit()
+        raise
+
     get_rate_limiter().check(rate_limit_key, _LOGIN_USERNAME_LIMIT, _LOGIN_USERNAME_WINDOW_SECONDS)
 
     result = await db.execute(select(User).where(User.username == username))
@@ -60,6 +76,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     )
 
     if login_failed:
+        get_account_locker().register_failure(locker_key)
         await audit_service.log_action(
             db,
             request,
@@ -75,6 +92,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
 
+    get_account_locker().reset(locker_key)
     await audit_service.log_action(
         db,
         request,

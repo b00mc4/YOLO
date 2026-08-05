@@ -1,14 +1,11 @@
 from __future__ import annotations
-
 import uuid
-
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.user import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
@@ -109,3 +106,14 @@ async def resend_invite(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.resend_invite(db, request, current_user, user_id)
+
+
+@router.post("/{user_id}/unlock-account", response_model=MessageResponse)
+async def unlock_user_account(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    username = await user_service.unlock_user_account(db, request, current_user, user_id)
+    return MessageResponse(detail=f"ปลดล็อคบัญชี {username} สำเร็จ")

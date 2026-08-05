@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
+from app.core.account_lockout import get_account_locker
 from app.core.security import hash_password, hash_token
 from app.models.contact import Contact
 from app.models.user import User, UserRole
@@ -371,3 +372,27 @@ async def resend_invite(
     await db.commit()
     await db.refresh(target)
     return await _to_user_detail(db, target)
+
+
+async def unlock_user_account(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+) -> str:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    get_account_locker().reset(target.username.strip().lower())
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="account_unlocked",
+        detail=f"unlocked account: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    return target.username

@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from app.schemas.common import ErrorResponse
 from app.core.rate_limit import RateLimitExceeded
+from app.core.account_lockout import AccountLocked
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,18 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     )
 
 
+async def account_locked_handler(request: Request, exc: AccountLocked):
+    logger.warning("Login attempt blocked on locked account: %s %s", request.method, request.url.path)
+    retry_after = int(exc.retry_after_seconds) + 1
+    return JSONResponse(
+        status_code=status.HTTP_423_LOCKED,
+        content=ErrorResponse(
+            detail=f"บัญชีถูกล็อคชั่วคราว กรุณาลองใหม่ในอีก {retry_after} วินาที"
+        ).model_dump(),
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     messages: list[str] = []
     for err in exc.errors():
@@ -64,3 +77,4 @@ def register_exception_handlers(app: FastAPI):
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    app.add_exception_handler(AccountLocked, account_locked_handler)
