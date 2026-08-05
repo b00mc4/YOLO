@@ -1,15 +1,55 @@
 from __future__ import annotations
+import logging
 import uuid
-from fastapi import HTTPException, Request, status
+from datetime import datetime, timezone
+
+from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.deps import verify_village_scope
+from app.core.config import get_settings
+from app.db.session import async_session_maker
 from app.models.camera import Camera
+from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.camera import CameraCreate, CameraUpdate
+from app.schemas.camera import CameraCreate, CameraRead, CameraResyncRead, CameraUpdate
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service
+from app.services import ai_vision_service, audit_service, mediamtx_service
+
+settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+def _to_camera_read(camera: Camera) -> CameraRead:
+    return CameraRead(
+        id=camera.id,
+        village_id=camera.village_id,
+        name=camera.name,
+        lat=camera.lat,
+        long=camera.long,
+        stream_ai=camera.stream_ai,
+        stream_url=mediamtx_service.derive_stream_url(camera.id),
+        ai_vision_synced_at=camera.ai_vision_synced_at,
+        created_at=camera.created_at,
+        is_active=camera.is_active,
+    )
+
+
+async def _push_ai_vision_config(camera_id: uuid.UUID, stream_ai: str) -> None:
+    synced = await ai_vision_service.push_camera_config(camera_id, stream_ai)
+    if not synced:
+        return
+
+    async with async_session_maker() as db:
+        result = await db.execute(select(Camera).where(Camera.id == camera_id))
+        camera = result.scalar_one_or_none()
+        if camera is None:
+            return
+        camera.ai_vision_synced_at = datetime.now(timezone.utc)
+        await db.commit()
+
 
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
     result = await db.execute(select(Group).where(Group.id == village_id))
@@ -21,9 +61,10 @@ async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
 async def create_camera(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     payload: CameraCreate,
-) -> Camera:
+) -> CameraRead:
     if current_user.role == UserRole.ADMIN:
         village_id = current_user.village_id
     else:
@@ -35,11 +76,13 @@ async def create_camera(
         name=payload.name,
         lat=payload.lat,
         long=payload.long,
-        stream_url=payload.stream_url,
+        stream_ai=payload.stream_ai,
         is_active=True,
     )
     db.add(camera)
     await db.flush()
+
+    await mediamtx_service.register_path(camera.id, camera.stream_ai)
 
     await audit_service.log_action(
         db,
@@ -51,7 +94,10 @@ async def create_camera(
     )
     await db.commit()
     await db.refresh(camera)
-    return camera
+
+    background_tasks.add_task(_push_ai_vision_config, camera.id, camera.stream_ai)
+
+    return _to_camera_read(camera)
 
 async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> Camera:
     result = await db.execute(select(Camera).where(Camera.id == camera_id))
@@ -63,6 +109,10 @@ async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID)
     verify_village_scope(current_user, camera.village_id)
     return camera
 
+async def get_camera_detail(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> CameraRead:
+    camera = await get_camera(db, current_user, camera_id)
+    return _to_camera_read(camera)
+
 async def list_cameras(
     db: AsyncSession,
     current_user: User,
@@ -70,7 +120,7 @@ async def list_cameras(
     is_active_filter: bool | None,
     page: int,
     page_size: int,
-) -> PaginatedResponse[Camera]:
+) -> PaginatedResponse[CameraRead]:
     stmt = select(Camera)
     count_stmt = select(func.count()).select_from(Camera)
 
@@ -92,18 +142,29 @@ async def list_cameras(
     result = await db.execute(stmt)
     items = list(result.scalars().all())
 
-    return PaginatedResponse(items=items, total=total, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[_to_camera_read(item) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 async def update_camera(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     camera_id: uuid.UUID,
     payload: CameraUpdate,
-) -> Camera:
+) -> CameraRead:
     camera = await get_camera(db, current_user, camera_id)
 
     update_data = payload.model_dump(exclude_unset=True)
+    stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
+
+    if stream_ai_changed:
+        await mediamtx_service.update_path(camera.id, update_data["stream_ai"])
+
     for field, value in update_data.items():
         setattr(camera, field, value)
 
@@ -117,11 +178,16 @@ async def update_camera(
     )
     await db.commit()
     await db.refresh(camera)
-    return camera
+
+    if stream_ai_changed:
+        background_tasks.add_task(_push_ai_vision_config, camera.id, camera.stream_ai)
+
+    return _to_camera_read(camera)
 
 async def delete_camera(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     camera_id: uuid.UUID,
 ) -> None:
@@ -141,3 +207,62 @@ async def delete_camera(
         village_id=camera.village_id,
     )
     await db.commit()
+
+    background_tasks.add_task(ai_vision_service.notify_camera_deactivated, camera.id)
+
+async def hard_delete_camera(
+    db: AsyncSession,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: User,
+    camera_id: uuid.UUID,
+) -> None:
+    camera = await get_camera(db, current_user, camera_id)
+
+    detection_count_result = await db.execute(
+        select(func.count()).select_from(Car).where(Car.camera_id == camera_id)
+    )
+    if detection_count_result.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Camera has detection records and cannot be permanently deleted. "
+                "Use the standard delete endpoint to deactivate it instead."
+            ),
+        )
+
+    await mediamtx_service.remove_path(camera.id)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="camera_hard_deleted",
+        detail=f"camera permanently deleted: {camera.name}",
+        user_id=current_user.id,
+        village_id=camera.village_id,
+    )
+
+    await db.delete(camera)
+    await db.commit()
+
+    background_tasks.add_task(ai_vision_service.notify_camera_deleted, camera_id)
+
+async def resync_camera(
+    db: AsyncSession,
+    current_user: User,
+    camera_id: uuid.UUID,
+) -> CameraResyncRead:
+    camera = await get_camera(db, current_user, camera_id)
+
+    synced = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
+    if not synced:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to sync camera with ai vision service",
+        )
+
+    camera.ai_vision_synced_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(camera)
+
+    return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)

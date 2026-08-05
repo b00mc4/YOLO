@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     smtp_password: str
     smtp_from_email: str
 
+    mediamtx_api_url: str
+    mediamtx_public_url: str
+    mediamtx_api_user: str
+    mediamtx_api_password: str
+
+    ai_vision_api_url: str
+    ai_vision_api_key: str
+
     @model_validator(mode="after")
     def check_cookie_security(self) -> "Settings":
         if self.cookie_samesite == "none" and not self.cookie_secure:

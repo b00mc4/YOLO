@@ -26,6 +26,8 @@ dependencies = [
     "aiosmtplib>=3.0.2",
     "pillow>=10.4.0",
     "tzdata>=2024.1",
+    # Outbound HTTP calls (MediaMTX API, AI vision service)
+    "httpx>=0.27.2",
 ]
 
 [project.optional-dependencies]

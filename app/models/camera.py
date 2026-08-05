@@ -15,7 +15,8 @@ class Camera(Base):
     name = Column(String(255), nullable=False)
     lat = Column(Float(53), nullable=False)
     long = Column(Float(53), nullable=False)
-    stream_url = Column(String(255), nullable=False)
+    stream_ai = Column(String(255), nullable=False)
+    ai_vision_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active = Column(Boolean, nullable=False, server_default=true())
 
