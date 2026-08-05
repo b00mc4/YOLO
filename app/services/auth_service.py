@@ -20,6 +20,7 @@ from app.models.verify import Verify, VerifyType
 from app.services import audit_service, email_service
 from app.models.group import Group
 from app.models.user import User, UserRole
+from app.core.rate_limit import get_rate_limiter
 
 settings = get_settings()
 
@@ -27,7 +28,13 @@ REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
 
 _GENERIC_LOGIN_ERROR = "Incorrect username or password"
 
+_LOGIN_USERNAME_LIMIT = 50
+_LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
+
 async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str):
+    rate_limit_key = f"login:username:{username.strip().lower()}"
+    get_rate_limiter().check(rate_limit_key, _LOGIN_USERNAME_LIMIT, _LOGIN_USERNAME_WINDOW_SECONDS)
+
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
 
@@ -77,6 +84,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         village_id=user.village_id,
     )
     await db.commit()
+    get_rate_limiter().reset(rate_limit_key)
     return user
 
 

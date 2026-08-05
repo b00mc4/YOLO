@@ -1,13 +1,11 @@
 from __future__ import annotations
-
 import logging
-
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
-
 from app.schemas.common import ErrorResponse
+from app.core.rate_limit import RateLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +27,16 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
         logger.warning("IntegrityError sqlstate=%s detail=%s", sqlstate, exc.orig)
 
     return JSONResponse(status_code=status_code, content=ErrorResponse(detail=detail).model_dump())
+
+
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    logger.warning("Rate limit exceeded on %s %s", request.method, request.url.path)
+    retry_after = int(exc.retry_after_seconds) + 1
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content=ErrorResponse(detail="Too many requests, please try again later").model_dump(),
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -55,3 +63,4 @@ def register_exception_handlers(app: FastAPI):
     app.add_exception_handler(IntegrityError, integrity_error_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)

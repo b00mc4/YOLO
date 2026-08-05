@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cookie_domain: str | None = None
 
+    trust_proxy_headers: bool = False
+    
     sse_ticket_expire_seconds: int = 30
 
     api_key_header_name: str = "X-API-Key"

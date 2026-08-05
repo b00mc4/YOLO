@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
@@ -17,11 +16,15 @@ from app.schemas.auth import (
 )
 from app.schemas.common import MessageResponse
 from app.services import auth_service
+from app.api.deps import get_current_user, rate_limit_by_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
 _REFRESH_COOKIE_PATH = "/api/auth"
+
+_LOGIN_IP_LIMIT = 50
+_LOGIN_IP_WINDOW_SECONDS = 30 * 60
 
 def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
     response.set_cookie(
@@ -43,7 +46,11 @@ def _clear_refresh_cookie(response: Response) -> None:
     )
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    dependencies=[Depends(rate_limit_by_ip("login", _LOGIN_IP_LIMIT, _LOGIN_IP_WINDOW_SECONDS))],
+)
 async def login(
     request: Request,
     response: Response,

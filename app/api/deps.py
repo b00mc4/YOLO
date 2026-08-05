@@ -11,6 +11,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.models.group import Group
+from app.core.rate_limit import RateLimitExceeded, get_rate_limiter
 
 settings = get_settings()
 
@@ -113,3 +114,18 @@ async def verify_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
         )
+
+def get_client_ip(request: Request) -> str:
+    if settings.trust_proxy_headers:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+def rate_limit_by_ip(prefix: str, limit: int, window_seconds: float):
+    async def checker(request: Request):
+        client_ip = get_client_ip(request)
+        get_rate_limiter().check(f"{prefix}:ip:{client_ip}", limit, window_seconds)
+
+    return checker
