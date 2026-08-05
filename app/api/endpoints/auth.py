@@ -25,6 +25,8 @@ _REFRESH_COOKIE_PATH = "/api/auth"
 
 _LOGIN_IP_LIMIT = 50
 _LOGIN_IP_WINDOW_SECONDS = 30 * 60
+_FORGOT_PASSWORD_IP_LIMIT = 20
+_FORGOT_PASSWORD_IP_WINDOW_SECONDS = 60 * 60
 
 def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
     response.set_cookie(
@@ -93,14 +95,18 @@ async def logout(
     return MessageResponse(detail="Logged out successfully")
 
 
-@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(rate_limit_by_ip("forgot_password", _FORGOT_PASSWORD_IP_LIMIT, _FORGOT_PASSWORD_IP_WINDOW_SECONDS))
+    ],
+)
 async def forgot_password(
     payload: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """ลืมรหัสผ่าน ส่งลิ้ง Token url ไปให้ User"""
     await auth_service.request_password_reset(db, payload.email)
-
 
 @router.post("/set-password", response_model=SetPasswordResponse)
 async def set_password(

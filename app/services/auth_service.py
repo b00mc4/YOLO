@@ -31,6 +31,8 @@ _GENERIC_LOGIN_ERROR = "Incorrect username or password"
 
 _LOGIN_USERNAME_LIMIT = 50
 _LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
+_FORGOT_PASSWORD_EMAIL_LIMIT = 5
+_FORGOT_PASSWORD_EMAIL_WINDOW_SECONDS = 24 * 60 * 60
 
 async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str):
     normalized_username = username.strip().lower()
@@ -51,7 +53,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
 
     get_rate_limiter().check(rate_limit_key, _LOGIN_USERNAME_LIMIT, _LOGIN_USERNAME_WINDOW_SECONDS)
 
-    result = await db.execute(select(User).where(User.username == username))
+    result = await db.execute(select(User).where(User.username == normalized_username))
     user = result.scalar_one_or_none()
 
     village_is_active = True
@@ -225,6 +227,19 @@ async def invalidate_pending_verify_tokens(
 
 
 async def request_password_reset(db: AsyncSession, email: str) -> None:
+    normalized_email = email.strip().lower()
+    get_rate_limiter().check(
+        f"forgot_password:email:{normalized_email}",
+        _FORGOT_PASSWORD_EMAIL_LIMIT,
+        _FORGOT_PASSWORD_EMAIL_WINDOW_SECONDS,
+    )
+
+    if email_service.is_email_service_degraded():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ระบบส่งอีเมลขัดข้องชั่วคราว กรุณาลองใหม่ภายหลัง",
+        )
+
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 

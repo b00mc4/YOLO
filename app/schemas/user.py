@@ -22,6 +22,11 @@ class UserCreate(BaseModel):
     role: UserRole
     village_id: uuid.UUID | None = None
 
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, v: str) -> str:
+        return v.strip().lower()
+
     @model_validator(mode="after")
     def check_village_matches_role(self) -> UserCreate:
         if self.role == UserRole.SUPERADMIN and self.village_id is not None:

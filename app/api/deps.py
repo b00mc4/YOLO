@@ -20,6 +20,9 @@ api_key_scheme = APIKeyHeader(name=settings.api_key_header_name, auto_error=Fals
 
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
+_API_KEY_FAILURE_LIMIT = 3
+_API_KEY_FAILURE_WINDOW_SECONDS = 5 * 60
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -101,6 +104,12 @@ async def verify_api_key(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     if api_key is None or not secrets.compare_digest(api_key, settings.api_key):
+        get_rate_limiter().check(
+            f"api_key_rejected:ip:{get_client_ip(request)}",
+            _API_KEY_FAILURE_LIMIT,
+            _API_KEY_FAILURE_WINDOW_SECONDS,
+        )
+
         from app.services import audit_service
 
         await audit_service.log_action(

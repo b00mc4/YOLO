@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import deque
 from time import monotonic
-
+from collections import OrderedDict, deque
 
 class RateLimitExceeded(Exception):
     def __init__(self, retry_after_seconds: float):
@@ -10,12 +10,22 @@ class RateLimitExceeded(Exception):
 
 
 class InMemorySingleWorkerRateLimiter:
+    _MAX_TRACKED_KEYS = 10_000
+
     def __init__(self) -> None:
-        self._hits: dict[str, deque[float]] = {}
+        self._hits: OrderedDict[str, deque[float]] = OrderedDict()
 
     def check(self, key: str, limit: int, window_seconds: float) -> None:
         now = monotonic()
-        hits = self._hits.setdefault(key, deque())
+        hits = self._hits.get(key)
+
+        if hits is None:
+            if len(self._hits) >= self._MAX_TRACKED_KEYS:
+                self._hits.popitem(last=False)
+            hits = deque()
+            self._hits[key] = hits
+        else:
+            self._hits.move_to_end(key)
 
         while hits and now - hits[0] >= window_seconds:
             hits.popleft()

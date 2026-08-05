@@ -146,6 +146,16 @@ async def _to_user_me_detail(db: AsyncSession, user: User) -> UserMeDetail:
         contacts=[ContactRead.model_validate(contact) for contact in contacts],
     )
 
+def _to_user_register(user: User, invite_email_sent: bool) -> UserRegister:
+    return UserRegister(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        village_id=user.village_id,
+        created_at=user.created_at,
+        invite_email_sent=invite_email_sent,
+    )
+
 
 async def create_user(
     db: AsyncSession,
@@ -199,7 +209,7 @@ async def create_user(
         invite_email_sent = False
         logger.warning("Failed to send invite email to new user: %s", user.username)
 
-    return await _to_user_detail(db, user, invite_email_sent=invite_email_sent)
+    return _to_user_register(user, invite_email_sent)
 
 
 async def list_users(
