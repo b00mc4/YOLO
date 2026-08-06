@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.db.session import get_db
@@ -18,10 +18,11 @@ _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
 async def create_camera(
     payload: CameraCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await camera_service.create_camera(db, request, current_user, payload)
+    return await camera_service.create_camera(db, request, background_tasks, current_user, payload)
 
 
 @router.get("", response_model=PaginatedResponse[CameraRead])
@@ -50,18 +51,20 @@ async def update_camera(
     camera_id: uuid.UUID,
     payload: CameraUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await camera_service.update_camera(db, request, current_user, camera_id, payload)
+    return await camera_service.update_camera(db, request, background_tasks, current_user, camera_id, payload)
 
 
 @router.delete("/{camera_id}", response_model=MessageResponse)
 async def delete_camera(
     camera_id: uuid.UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    await camera_service.delete_camera(db, request, current_user, camera_id)
+    await camera_service.delete_camera(db, request, background_tasks, current_user, camera_id)
     return MessageResponse(detail="Camera deleted successfully")

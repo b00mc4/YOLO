@@ -32,3 +32,8 @@ alembic/versions/__pycache__/
 .vscode/
 .idea/
 .DS_Store
+
+mediamtx.exe
+mediamtx.yml
+auto.crt
+auto.key
