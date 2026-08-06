@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -14,12 +15,21 @@ from app.models.camera import Camera
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.camera import CameraCreate, CameraRead, CameraResyncRead, CameraUpdate
+from app.schemas.camera import (
+    CameraCreate,
+    CameraRead,
+    CameraResyncAllRead,
+    CameraResyncFailedEntry,
+    CameraResyncRead,
+    CameraUpdate,
+)
 from app.schemas.common import PaginatedResponse
 from app.services import ai_vision_service, audit_service, mediamtx_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+_RESYNC_CONCURRENCY_LIMIT = 10
 
 
 def _to_camera_read(camera: Camera) -> CameraRead:
@@ -82,7 +92,7 @@ async def create_camera(
     db.add(camera)
     await db.flush()
 
-    await mediamtx_service.register_path(camera.id, camera.stream_ai)
+    await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
 
     await audit_service.log_action(
         db,
@@ -163,7 +173,7 @@ async def update_camera(
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
 
     if stream_ai_changed:
-        await mediamtx_service.update_path(camera.id, update_data["stream_ai"])
+        await mediamtx_service.upsert_path(camera.id, update_data["stream_ai"])
 
     for field, value in update_data.items():
         setattr(camera, field, value)
@@ -266,3 +276,97 @@ async def resync_camera(
     await db.refresh(camera)
 
     return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)
+
+
+def _build_resync_scope_filters(
+    current_user: User, village_id_filter: uuid.UUID | None
+) -> list:
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is not None:
+            return [Camera.village_id == village_id_filter]
+        return []
+
+    if village_id_filter is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to specify village_id for this role",
+        )
+    return [Camera.village_id == current_user.village_id]
+
+
+async def _upsert_path_guarded(
+    semaphore: asyncio.Semaphore, camera: Camera
+) -> tuple[Camera, Exception | None]:
+    async with semaphore:
+        try:
+            await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
+        except Exception as exc:
+            return camera, exc
+        return camera, None
+
+
+async def _resync_cameras(db: AsyncSession, scope_filters: list) -> CameraResyncAllRead:
+    result = await db.execute(
+        select(Camera)
+        .join(Group, Camera.village_id == Group.id)
+        .where(Camera.is_active.is_(True), Group.is_active.is_(True), *scope_filters)
+    )
+    cameras = list(result.scalars().all())
+
+    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    outcomes = await asyncio.gather(
+        *(_upsert_path_guarded(semaphore, camera) for camera in cameras)
+    )
+
+    failed_cameras = [
+        CameraResyncFailedEntry(id=camera.id, name=camera.name)
+        for camera, error in outcomes
+        if error is not None
+    ]
+
+    return CameraResyncAllRead(
+        total=len(cameras),
+        succeeded=len(cameras) - len(failed_cameras),
+        failed=len(failed_cameras),
+        failed_cameras=failed_cameras,
+    )
+
+
+async def resync_all_cameras(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    village_id_filter: uuid.UUID | None,
+) -> CameraResyncAllRead:
+    scope_filters = _build_resync_scope_filters(current_user, village_id_filter)
+
+    if village_id_filter is not None:
+        await _get_village_or_404(db, village_id_filter)
+
+    resync_result = await _resync_cameras(db, scope_filters)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="camera_resync_all",
+        detail=(
+            f"resynced {resync_result.total} camera(s) with MediaMTX: "
+            f"{resync_result.succeeded} succeeded, {resync_result.failed} failed"
+        ),
+        user_id=current_user.id,
+        village_id=village_id_filter,
+    )
+    await db.commit()
+
+    return resync_result
+
+
+async def resync_all_cameras_on_startup(db: AsyncSession) -> CameraResyncAllRead:
+    resync_result = await _resync_cameras(db, scope_filters=[])
+    logger.info(
+        "Startup camera resync completed: total=%s succeeded=%s failed=%s",
+        resync_result.total,
+        resync_result.succeeded,
+        resync_result.failed,
+    )
+    return resync_result

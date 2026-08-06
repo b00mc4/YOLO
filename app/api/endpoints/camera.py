@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
-from app.schemas.camera import CameraCreate, CameraRead, CameraUpdate
+from app.schemas.camera import CameraCreate, CameraRead, CameraResyncAllRead, CameraUpdate
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import camera_service
 
@@ -35,6 +35,16 @@ async def list_cameras(
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.list_cameras(db, current_user, village_id, is_active, page, page_size)
+
+
+@router.post("/resync-all", response_model=CameraResyncAllRead)
+async def resync_all_cameras(
+    request: Request,
+    village_id: uuid.UUID | None = Query(default=None),
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.resync_all_cameras(db, request, current_user, village_id)
 
 
 @router.get("/{camera_id}", response_model=CameraRead)

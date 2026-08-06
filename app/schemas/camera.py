@@ -47,3 +47,15 @@ class CameraBasicRead(BaseModel):
 class CameraResyncRead(BaseModel):
     id: uuid.UUID
     ai_vision_synced_at: datetime | None
+
+
+class CameraResyncFailedEntry(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class CameraResyncAllRead(BaseModel):
+    total: int
+    succeeded: int
+    failed: int
+    failed_cameras: list[CameraResyncFailedEntry]

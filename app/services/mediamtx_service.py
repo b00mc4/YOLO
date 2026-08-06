@@ -23,9 +23,9 @@ def derive_stream_url(camera_id: uuid.UUID) -> str:
     return f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8"
 
 
-async def register_path(camera_id: uuid.UUID, source_rtsp_url: str) -> None:
+async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> None:
     path_name = _path_name(camera_id)
-    url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/add/{path_name}"
+    url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/replace/{path_name}"
 
     try:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
@@ -35,49 +35,20 @@ async def register_path(camera_id: uuid.UUID, source_rtsp_url: str) -> None:
                 auth=_auth(),
             )
     except httpx.HTTPError as exc:
-        logger.error("MediaMTX register_path request failed for %s: %s", camera_id, exc)
+        logger.error("MediaMTX upsert_path request failed for %s: %s", camera_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to register camera stream with MediaMTX",
+            detail="Failed to sync camera stream with MediaMTX",
         )
 
     if response.status_code >= 400:
         logger.error(
-            "MediaMTX register_path rejected for %s: status=%s body=%s",
+            "MediaMTX upsert_path rejected for %s: status=%s body=%s",
             camera_id, response.status_code, response.text,
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="MediaMTX rejected the camera stream source",
-        )
-
-
-async def update_path(camera_id: uuid.UUID, source_rtsp_url: str) -> None:
-    path_name = _path_name(camera_id)
-    url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/edit/{path_name}"
-
-    try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                url,
-                json={"source": source_rtsp_url, "sourceOnDemand": True},
-                auth=_auth(),
-            )
-    except httpx.HTTPError as exc:
-        logger.error("MediaMTX update_path request failed for %s: %s", camera_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to update camera stream with MediaMTX",
-        )
-
-    if response.status_code >= 400:
-        logger.error(
-            "MediaMTX update_path rejected for %s: status=%s body=%s",
-            camera_id, response.status_code, response.text,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="MediaMTX rejected the camera stream update",
+            detail="MediaMTX rejected the camera stream configuration",
         )
 
 
