@@ -370,3 +370,34 @@ async def resync_all_cameras_on_startup(db: AsyncSession) -> CameraResyncAllRead
         resync_result.failed,
     )
     return resync_result
+
+async def resync_camera_ai_vision(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    camera_id: uuid.UUID,
+) -> CameraResyncRead:
+    camera = await get_camera(db, current_user, camera_id)
+
+    synced = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
+    if not synced:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to sync camera with ai vision service",
+        )
+
+    camera.ai_vision_synced_at = datetime.now(timezone.utc)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="camera_resync_ai_vision",
+        detail=f"resynced camera with ai vision service: {camera.name}",
+        user_id=current_user.id,
+        village_id=camera.village_id,
+    )
+
+    await db.commit()
+    await db.refresh(camera)
+
+    return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)

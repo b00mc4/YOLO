@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
-from app.schemas.camera import CameraCreate, CameraRead, CameraResyncAllRead, CameraUpdate
+from app.schemas.camera import (
+    CameraCreate,
+    CameraRead,
+    CameraResyncAllRead,
+    CameraResyncRead,
+    CameraUpdate,
+)
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import camera_service
 
@@ -66,6 +72,16 @@ async def update_camera(
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.update_camera(db, request, background_tasks, current_user, camera_id, payload)
+
+
+@router.post("/{camera_id}/resync-ai-vision", response_model=CameraResyncRead)
+async def resync_camera_ai_vision(
+    camera_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.resync_camera_ai_vision(db, request, current_user, camera_id)
 
 
 @router.delete("/{camera_id}", response_model=MessageResponse)
