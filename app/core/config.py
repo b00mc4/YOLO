@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import Literal
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     cookie_domain: str | None = None
 
     trust_proxy_headers: bool = False
-    
+    trusted_proxy_hops: int = Field(default=1, ge=1)
+
     sse_ticket_expire_seconds: int = 30
 
     api_key_header_name: str = "X-API-Key"

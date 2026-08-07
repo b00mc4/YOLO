@@ -47,18 +47,116 @@ def _to_camera_read(camera: Camera) -> CameraRead:
     )
 
 
-async def _push_ai_vision_config(camera_id: uuid.UUID, stream_ai: str) -> None:
-    synced = await ai_vision_service.push_camera_config(camera_id, stream_ai)
-    if not synced:
-        return
+async def _notify_sync_failure(
+    village_id: uuid.UUID,
+    camera_id: uuid.UUID,
+    camera_name: str,
+    failed_services: list[str],
+) -> None:
+    detail = (
+        f"camera sync failed for '{camera_name}' (id={camera_id}): "
+        f"{', '.join(failed_services)} did not accept the update"
+    )
+    logger.error(detail)
 
     async with async_session_maker() as db:
-        result = await db.execute(select(Camera).where(Camera.id == camera_id))
-        camera = result.scalar_one_or_none()
-        if camera is None:
-            return
-        camera.ai_vision_synced_at = datetime.now(timezone.utc)
+        await audit_service.log_action(
+            db,
+            request=None,
+            action="camera_sync_failed",
+            detail=detail,
+            village_id=village_id,
+        )
         await db.commit()
+
+    from app.services import sse_service
+
+    await sse_service.publish(
+        village_id,
+        "camera_sync_failed",
+        {
+            "camera_id": str(camera_id),
+            "camera_name": camera_name,
+            "failed_services": failed_services,
+        },
+    )
+
+
+async def _sync_camera_create(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str, stream_ai: str) -> None:
+    failed_services: list[str] = []
+
+    mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
+
+    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
+    if ai_vision_ok:
+        async with async_session_maker() as db:
+            result = await db.execute(select(Camera).where(Camera.id == camera_id))
+            camera = result.scalar_one_or_none()
+            if camera is not None:
+                camera.ai_vision_synced_at = datetime.now(timezone.utc)
+                await db.commit()
+    else:
+        failed_services.append("ai_vision")
+
+    if failed_services:
+        await _notify_sync_failure(village_id, camera_id, camera_name, failed_services)
+
+
+async def _sync_camera_update(
+    camera_id: uuid.UUID,
+    village_id: uuid.UUID,
+    camera_name: str,
+    stream_ai: str | None,
+    is_active: bool | None,
+) -> None:
+    failed_services: list[str] = []
+    ai_vision_synced = False
+
+    if stream_ai is not None:
+        mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+        if not mediamtx_ok:
+            failed_services.append("mediamtx")
+
+        ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
+        if ai_vision_ok:
+            ai_vision_synced = True
+        else:
+            failed_services.append("ai_vision")
+
+    if is_active is not None:
+        status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
+        if status_ok:
+            ai_vision_synced = True
+        else:
+            failed_services.append("ai_vision")
+
+    if ai_vision_synced:
+        async with async_session_maker() as db:
+            result = await db.execute(select(Camera).where(Camera.id == camera_id))
+            camera = result.scalar_one_or_none()
+            if camera is not None:
+                camera.ai_vision_synced_at = datetime.now(timezone.utc)
+                await db.commit()
+
+    if failed_services:
+        await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
+
+
+async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
+    failed_services: list[str] = []
+
+    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
+
+    ai_vision_ok = await ai_vision_service.notify_camera_deleted(camera_id)
+    if not ai_vision_ok:
+        failed_services.append("ai_vision")
+
+    if failed_services:
+        await _notify_sync_failure(village_id, camera_id, camera_name, failed_services)
 
 
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
@@ -92,8 +190,6 @@ async def create_camera(
     db.add(camera)
     await db.flush()
 
-    await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
-
     await audit_service.log_action(
         db,
         request,
@@ -105,7 +201,9 @@ async def create_camera(
     await db.commit()
     await db.refresh(camera)
 
-    background_tasks.add_task(_push_ai_vision_config, camera.id, camera.stream_ai)
+    background_tasks.add_task(
+        _sync_camera_create, camera.id, camera.village_id, camera.name, camera.stream_ai
+    )
 
     return _to_camera_read(camera)
 
@@ -173,17 +271,6 @@ async def update_camera(
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
     is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
 
-    if stream_ai_changed:
-        await mediamtx_service.upsert_path(camera.id, update_data["stream_ai"])
-
-    if is_active_changed:
-        synced = await ai_vision_service.set_camera_active_status(camera.id, update_data["is_active"])
-        if not synced:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to sync camera status with ai vision service",
-            )
-
     for field, value in update_data.items():
         setattr(camera, field, value)
 
@@ -209,14 +296,22 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
 
-    if stream_ai_changed:
-        background_tasks.add_task(_push_ai_vision_config, camera.id, camera.stream_ai)
+    if stream_ai_changed or is_active_changed:
+        background_tasks.add_task(
+            _sync_camera_update,
+            camera.id,
+            camera.village_id,
+            camera.name,
+            camera.stream_ai if stream_ai_changed else None,
+            camera.is_active if is_active_changed else None,
+        )
 
     return _to_camera_read(camera)
 
 async def delete_camera(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     camera_id: uuid.UUID,
 ) -> None:
@@ -234,8 +329,9 @@ async def delete_camera(
             ),
         )
 
-    await mediamtx_service.remove_path(camera.id)
-    await ai_vision_service.notify_camera_deleted(camera.id)
+    camera_id_value = camera.id
+    village_id = camera.village_id
+    camera_name = camera.name
 
     await audit_service.log_action(
         db,
@@ -248,6 +344,8 @@ async def delete_camera(
 
     await db.delete(camera)
     await db.commit()
+
+    background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
 async def resync_camera(
     db: AsyncSession,
@@ -288,13 +386,10 @@ def _build_resync_scope_filters(
 
 async def _upsert_path_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
-) -> tuple[Camera, Exception | None]:
+) -> tuple[Camera, bool]:
     async with semaphore:
-        try:
-            await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
-        except Exception as exc:
-            return camera, exc
-        return camera, None
+        ok = await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
+        return camera, ok
 
 
 async def _resync_cameras(db: AsyncSession, scope_filters: list) -> CameraResyncAllRead:
@@ -312,8 +407,8 @@ async def _resync_cameras(db: AsyncSession, scope_filters: list) -> CameraResync
 
     failed_cameras = [
         CameraResyncFailedEntry(id=camera.id, name=camera.name)
-        for camera, error in outcomes
-        if error is not None
+        for camera, ok in outcomes
+        if not ok
     ]
 
     return CameraResyncAllRead(

@@ -84,11 +84,11 @@ async def read_and_validate_image(upload: UploadFile) -> tuple[bytes, str]:
 def build_detection_image_path(
     village_id: uuid.UUID,
     camera_id: uuid.UUID,
-    event_id: uuid.UUID,
+    image_id: uuid.UUID,
     suffix: str,
     extension: str,
 ) -> str:
-    relative_path = Path(str(village_id)) / str(camera_id) / f"{event_id}_{suffix}.{extension}"
+    relative_path = Path(str(village_id)) / str(camera_id) / f"{image_id}_{suffix}.{extension}"
     return str(relative_path)
 
 

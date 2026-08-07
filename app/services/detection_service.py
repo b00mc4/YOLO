@@ -177,20 +177,22 @@ async def create_detection(
     camera = await _get_camera_or_404(db, payload.camera_id)
     await _ensure_event_not_duplicate(db, payload.event_id)
 
+    car_id = uuid.uuid4()
+
     crop_content, crop_extension = await storage_service.read_and_validate_image(image_crop)
     full_content, full_extension = await storage_service.read_and_validate_image(image_full)
 
     crop_path = storage_service.build_detection_image_path(
         village_id=camera.village_id,
         camera_id=camera.id,
-        event_id=payload.event_id,
+        image_id=car_id,
         suffix="crop",
         extension=crop_extension,
     )
     full_path = storage_service.build_detection_image_path(
         village_id=camera.village_id,
         camera_id=camera.id,
-        event_id=payload.event_id,
+        image_id=car_id,
         suffix="full",
         extension=full_extension,
     )
@@ -213,6 +215,7 @@ async def create_detection(
         )
 
     car = Car(
+        id=car_id,
         event_id=payload.event_id,
         camera_id=camera.id,
         license_plate=payload.license_plate,

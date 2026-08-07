@@ -14,22 +14,32 @@ from app.api.deps import get_client_ip
 _DETAIL_MAX_LENGTH = 1000
 _USER_AGENT_MAX_LENGTH = 512
 
+_BACKGROUND_IP_ADDRESS = "background"
+_BACKGROUND_USER_AGENT = "background-task"
+
 
 async def log_action(
     db: AsyncSession,
-    request: Request,
+    request: Request | None,
     action: str,
     detail: str,
     user_id: uuid.UUID | None = None,
     village_id: uuid.UUID | None = None,
 ):
+    if request is not None:
+        ip_address = get_client_ip(request)
+        user_agent = request.headers.get("user-agent", "")[:_USER_AGENT_MAX_LENGTH]
+    else:
+        ip_address = _BACKGROUND_IP_ADDRESS
+        user_agent = _BACKGROUND_USER_AGENT
+
     entry = AuditLog(
         village_id=village_id,
         user_id=user_id,
         action=action,
         detail=detail[:_DETAIL_MAX_LENGTH],
-        ip_address=get_client_ip(request),
-        user_agent=request.headers.get("user-agent", "")[:_USER_AGENT_MAX_LENGTH],
+        ip_address=ip_address,
+        user_agent=user_agent,
     )
     db.add(entry)
     await db.flush()

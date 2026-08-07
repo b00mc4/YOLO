@@ -128,7 +128,9 @@ def get_client_ip(request: Request) -> str:
     if settings.trust_proxy_headers:
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            return forwarded_for.split(",")[0].strip()
+            hops = [hop.strip() for hop in forwarded_for.split(",")]
+            if len(hops) >= settings.trusted_proxy_hops:
+                return hops[-settings.trusted_proxy_hops]
     return request.client.host if request.client else ""
 
 

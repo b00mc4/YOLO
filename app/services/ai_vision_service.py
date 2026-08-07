@@ -3,7 +3,6 @@ import logging
 import uuid
 import httpx
 from app.core.config import get_settings
-from fastapi import HTTPException,status
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ async def set_camera_active_status(camera_id: uuid.UUID, is_active: bool) -> boo
     return True
 
 
-async def notify_camera_deleted(camera_id: uuid.UUID) -> None:
+async def notify_camera_deleted(camera_id: uuid.UUID) -> bool:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/cameras/{camera_id}"
 
     try:
@@ -70,14 +69,13 @@ async def notify_camera_deleted(camera_id: uuid.UUID) -> None:
             )
     except httpx.HTTPError as exc:
         logger.error("ai vision notify_camera_deleted request failed for %s: %s", camera_id, exc)
-        raise HTTPException(502, "Failed to notify ai vision service of camera deletion")
+        return False
 
-    if response.status_code >= 400 and response.status_code != status.HTTP_404_NOT_FOUND:
+    if response.status_code >= 400 and response.status_code != 404:
         logger.error(
             "ai vision notify_camera_deleted rejected for %s: status=%s body=%s",
             camera_id, response.status_code, response.text,
-            )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="ai vision service rejected the camera deletion",
         )
+        return False
+
+    return True
