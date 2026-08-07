@@ -44,10 +44,10 @@ def _verify_user_write_scope(current_user: User, target: User) -> None:
     if target.id == current_user.id:
         return
     if current_user.role == UserRole.ADMIN:
-        if target.role == UserRole.ADMIN:
+        if target.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can modify another admin's account",
+                detail="Only a superadmin can modify an admin or superadmin account",
             )
         if target.village_id != current_user.village_id:
             raise HTTPException(

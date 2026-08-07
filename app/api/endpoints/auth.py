@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from app.api.deps import get_current_user
@@ -104,9 +104,10 @@ async def logout(
 )
 async def forgot_password(
     payload: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    await auth_service.request_password_reset(db, payload.email)
+    await auth_service.request_password_reset(db, background_tasks, payload.email)
 
 @router.post("/set-password", response_model=SetPasswordResponse)
 async def set_password(

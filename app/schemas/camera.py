@@ -6,17 +6,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class CameraCreate(BaseModel):
     village_id: uuid.UUID
-    name: str
+    name: str = Field(max_length=255)         
     lat: float = Field(ge=-90, le=90)
     long: float = Field(ge=-180, le=180)
-    stream_ai: str
+    stream_ai: str = Field(max_length=255)     
 
 
 class CameraUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=255)    
     lat: float | None = Field(default=None, ge=-90, le=90)
     long: float | None = Field(default=None, ge=-180, le=180)
-    stream_ai: str | None = None
+    stream_ai: str | None = Field(default=None, max_length=255) 
     is_active: bool | None = None
 
 

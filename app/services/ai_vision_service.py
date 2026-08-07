@@ -73,5 +73,11 @@ async def notify_camera_deleted(camera_id: uuid.UUID) -> None:
         raise HTTPException(502, "Failed to notify ai vision service of camera deletion")
 
     if response.status_code >= 400 and response.status_code != status.HTTP_404_NOT_FOUND:
-        logger.error(...)
-        raise HTTPException(502, "ai vision service rejected the camera deletion")
+        logger.error(
+            "ai vision notify_camera_deleted rejected for %s: status=%s body=%s",
+            camera_id, response.status_code, response.text,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="ai vision service rejected the camera deletion",
+        )

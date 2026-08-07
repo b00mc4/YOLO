@@ -26,9 +26,10 @@ from app.schemas.car import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, sse_service, storage_service
+import logging
 
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
-
+logger = logging.getLogger(__name__)
 
 def _to_car_read(car: Car, request: Request) -> CarRead:
     return CarRead(
@@ -240,14 +241,20 @@ async def create_detection(
         raise
     await db.refresh(car)
 
-    event_payload = _build_detection_event_payload(request, camera, car)
-    event_data = event_payload.model_dump(mode="json")
-    await sse_service.publish(camera.village_id, "detection_created", event_data)
-    if is_blacklist:
-        await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
+    try:
+        event_payload = _build_detection_event_payload(request, camera, car)
+        event_data = event_payload.model_dump(mode="json")
+        await sse_service.publish(camera.village_id, "detection_created", event_data)
+        if is_blacklist:
+            await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
 
-    global_payload = _build_global_detection_event_payload(request, camera, car)
-    await sse_service.publish_global("detection_created", global_payload.model_dump(mode="json"))
+        global_payload = _build_global_detection_event_payload(request, camera, car)
+        await sse_service.publish_global("detection_created", global_payload.model_dump(mode="json"))
+    except Exception:
+        logger.exception(
+            "Failed to publish SSE event for detection_id=%s event_id=%s",
+            car.id, car.event_id,
+        )
 
     return _to_car_read(car, request)
 

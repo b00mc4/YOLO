@@ -32,10 +32,10 @@ def _verify_write_scope(current_user: User, target: User) -> None:
     if target.id == current_user.id:
         return
     if current_user.role == UserRole.ADMIN:
-        if target.role == UserRole.ADMIN:
+        if target.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can manage another admin's contacts",
+                detail="Only a superadmin can manage an admin or superadmin's contacts",
             )
         if target.village_id != current_user.village_id:
             raise HTTPException(
@@ -93,10 +93,10 @@ def _verify_contact_write_scope(
     if contact.user_id == current_user.id:
         return
     if current_user.role == UserRole.ADMIN:
-        if owner.role == UserRole.ADMIN:
+        if owner.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can manage another admin's contacts",
+                detail="Only a superadmin can manage an admin or superadmin's contacts",
             )
         if owner.village_id != current_user.village_id:
             raise HTTPException(

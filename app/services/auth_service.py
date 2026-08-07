@@ -1,8 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request, status
-from fastapi.concurrency import run_in_threadpool
+from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
@@ -226,7 +225,9 @@ async def invalidate_pending_verify_tokens(
     await db.execute(stmt)
 
 
-async def request_password_reset(db: AsyncSession, email: str) -> None:
+async def request_password_reset(
+    db: AsyncSession, background_tasks: BackgroundTasks, email: str
+) -> None:
     normalized_email = email.strip().lower()
     get_rate_limiter().check(
         f"forgot_password:email:{normalized_email}",
@@ -251,7 +252,9 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
         db, user.id, VerifyType.PASSWORD_RESET, exclude_token_hash=hash_token(raw_token)
     )
     await db.commit()
-    await run_in_threadpool(email_service.send_set_password_email, user.email, raw_token)
+    background_tasks.add_task(
+        email_service.send_set_password_email_background, user.email, raw_token
+    )
 
 
 async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> str:

@@ -14,10 +14,10 @@ class AuditLog(Base):
     village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id"), nullable=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id"), nullable=True, index=True)
     action = Column(String(255), nullable=False)
-    detail = Column(String(255), nullable=False)
+    detail = Column(String(1000), nullable=False)
     ip_address = Column(String(255), nullable=False)
-    user_agent = Column(String(255), nullable=False)
+    user_agent = Column(String(512), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     village = relationship("Group", back_populates="audit_logs")
-    user = relationship("User", back_populates="audit_logs") 
+    user = relationship("User", back_populates="audit_logs")

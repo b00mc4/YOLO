@@ -8,6 +8,11 @@ from app.models.audit_log import AuditLog
 from app.models.user import User, UserRole
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.common import PaginatedResponse
+from app.api.deps import get_client_ip
+
+
+_DETAIL_MAX_LENGTH = 1000
+_USER_AGENT_MAX_LENGTH = 512
 
 
 async def log_action(
@@ -22,9 +27,9 @@ async def log_action(
         village_id=village_id,
         user_id=user_id,
         action=action,
-        detail=detail,
-        ip_address=request.client.host if request.client else "",
-        user_agent=request.headers.get("user-agent", ""),
+        detail=detail[:_DETAIL_MAX_LENGTH],
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("user-agent", "")[:_USER_AGENT_MAX_LENGTH],
     )
     db.add(entry)
     await db.flush()

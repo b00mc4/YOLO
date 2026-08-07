@@ -1,10 +1,12 @@
 from __future__ import annotations
+import logging
 import smtplib
 from email.message import EmailMessage
-from app.core.config import get_settings
 from time import monotonic
+from app.core.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 class _EmailServiceHealth:
     _DEGRADED_COOLDOWN_SECONDS = 60.0
@@ -63,3 +65,9 @@ def send_invite_email(to_email: str, raw_token: str) -> None:
         subject="ยินดีต้อนรับเข้าสู่ระบบ Village Guard",
         body=f"คุณได้รับเชิญให้เข้าใช้งานระบบ กรุณาคลิกลิงก์เพื่อตั้งรหัสผ่านและเริ่มใช้งานบัญชีของคุณ: {link}",
     )
+
+def send_set_password_email_background(to_email: str, raw_token: str) -> None:
+    try:
+        send_set_password_email(to_email, raw_token)
+    except Exception:
+        logger.warning("Failed to send password reset email to %s", to_email)
