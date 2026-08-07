@@ -88,9 +88,8 @@ async def resync_camera_ai_vision(
 async def delete_camera(
     camera_id: uuid.UUID,
     request: Request,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    await camera_service.delete_camera(db, request, background_tasks, current_user, camera_id)
-    return MessageResponse(detail="Camera deleted successfully")
+    await camera_service.delete_camera(db, request, current_user, camera_id)
+    return MessageResponse(detail="Camera permanently deleted")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.contact import ContactType
 from app.models.user import UserRole
 
@@ -15,8 +15,8 @@ def _normalize_content_type(value):
 class ContactCreate(BaseModel):
     user_id: uuid.UUID | None = None
     content_type: ContactType
-    custom_label: str | None = None
-    value: str
+    custom_label: str | None = Field(default=None, max_length=255)
+    value: str = Field(max_length=255)
 
     @field_validator("content_type", mode="before")
     @classmethod
@@ -45,8 +45,8 @@ class ContactCreate(BaseModel):
 
 class ContactUpdate(BaseModel):
     content_type: ContactType | None = None
-    custom_label: str | None = None
-    value: str | None = None
+    custom_label: str | None = Field(default=None, max_length=255)
+    value: str | None = Field(default=None, max_length=255)
 
     @field_validator("content_type", mode="before")
     @classmethod

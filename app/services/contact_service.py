@@ -26,11 +26,18 @@ async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     return user
 
 
-def _verify_write_scope(current_user: User, target_village_id: uuid.UUID | None) -> None:
+def _verify_write_scope(current_user: User, target: User) -> None:
     if current_user.role == UserRole.SUPERADMIN:
         return
+    if target.id == current_user.id:
+        return
     if current_user.role == UserRole.ADMIN:
-        if target_village_id != current_user.village_id:
+        if target.role == UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a superadmin can manage another admin's contacts",
+            )
+        if target.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed to manage contacts outside your village",
@@ -60,13 +67,13 @@ async def _resolve_target_user(
         return current_user
 
     target = await _get_user_or_404(db, requested_user_id)
-    _verify_write_scope(current_user, target.village_id)
+    _verify_write_scope(current_user, target)
     return target
 
 
-async def _get_contact_or_404(db: AsyncSession, contact_id: uuid.UUID) -> tuple[Contact, uuid.UUID | None]:
+async def _get_contact_or_404(db: AsyncSession, contact_id: uuid.UUID) -> tuple[Contact, User]:
     result = await db.execute(
-        select(Contact, User.village_id)
+        select(Contact, User)
         .join(User, Contact.user_id == User.id)
         .where(Contact.id == contact_id)
     )
@@ -79,22 +86,28 @@ async def _get_contact_or_404(db: AsyncSession, contact_id: uuid.UUID) -> tuple[
 def _verify_contact_write_scope(
     current_user: User,
     contact: Contact,
-    owner_village_id: uuid.UUID | None,
+    owner: User,
 ) -> None:
     if current_user.role == UserRole.SUPERADMIN:
         return
+    if contact.user_id == current_user.id:
+        return
     if current_user.role == UserRole.ADMIN:
-        if owner_village_id != current_user.village_id:
+        if owner.role == UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only a superadmin can manage another admin's contacts",
+            )
+        if owner.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed to manage contacts outside your village",
             )
         return
-    if contact.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to manage another user's contact",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not allowed to manage another user's contact",
+    )
 
 
 def _validate_content_type_consistency(content_type: ContactType, custom_label: str | None) -> None:
@@ -258,8 +271,8 @@ async def update_contact(
     contact_id: uuid.UUID,
     payload: ContactUpdate,
 ) -> ContactRead:
-    contact, owner_village_id = await _get_contact_or_404(db, contact_id)
-    _verify_contact_write_scope(current_user, contact, owner_village_id)
+    contact, owner = await _get_contact_or_404(db, contact_id)
+    _verify_contact_write_scope(current_user, contact, owner)
 
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -273,7 +286,7 @@ async def update_contact(
         action="contact_update",
         detail=f"updated contact ({contact.content_type.value}) id={contact.id}",
         user_id=current_user.id,
-        village_id=owner_village_id,
+        village_id=owner.village_id,
     )
 
     await db.commit()
@@ -287,8 +300,8 @@ async def delete_contact(
     current_user: User,
     contact_id: uuid.UUID,
 ) -> None:
-    contact, owner_village_id = await _get_contact_or_404(db, contact_id)
-    _verify_contact_write_scope(current_user, contact, owner_village_id)
+    contact, owner = await _get_contact_or_404(db, contact_id)
+    _verify_contact_write_scope(current_user, contact, owner)
 
     await audit_service.log_action(
         db,
@@ -296,7 +309,7 @@ async def delete_contact(
         action="contact_delete",
         detail=f"removed contact ({contact.content_type.value}) id={contact.id}",
         user_id=current_user.id,
-        village_id=owner_village_id,
+        village_id=owner.village_id,
     )
 
     await db.delete(contact)

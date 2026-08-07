@@ -1,6 +1,6 @@
 from __future__ import annotations
 import re
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from app.schemas.user import UserRead
 
 class TokenResponse(BaseModel):
@@ -20,9 +20,9 @@ def _validate_password_policy(value: str) -> str:
     return value
 
 class SetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-    confirm_new_password: str
+    token: str = Field(max_length=512)
+    new_password: str = Field(max_length=128)
+    confirm_new_password: str = Field(max_length=128)
 
     @field_validator("new_password")
     @classmethod
@@ -40,12 +40,12 @@ class SetPasswordResponse(BaseModel):
     username: str
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: EmailStr = Field(max_length=255)
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-    confirm_new_password: str
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(max_length=128)
+    confirm_new_password: str = Field(max_length=128)
     logout_all_sessions: bool
 
     @field_validator("new_password")

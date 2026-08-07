@@ -1,9 +1,8 @@
 from __future__ import annotations
-import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -21,15 +20,12 @@ async def _startup_camera_resync() -> None:
             await camera_service.resync_all_cameras_on_startup(db)
     except Exception:
         logger.exception("Startup camera resync with MediaMTX failed")
-        raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Startup camera resync with MediaMTX failed",
-                ) 
+        raise
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    app.state.startup_camera_resync_task = asyncio.create_task(_startup_camera_resync())
+    await _startup_camera_resync()
     yield
 
 

@@ -1,14 +1,15 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BlacklistCreate(BaseModel):
     village_id: uuid.UUID | None = None
-    license_plate: str
-    province: str
-    reason: str
+    license_plate: str = Field(max_length=255)
+    province: str = Field(max_length=255)
+    reason: str = Field(max_length=255)
+
 
     @field_validator("license_plate", "province")
     @classmethod
@@ -17,7 +18,7 @@ class BlacklistCreate(BaseModel):
 
 
 class BlacklistUpdate(BaseModel):
-    reason: str
+    reason: str = Field(max_length=255)
 
 
 class BlacklistRead(BaseModel):

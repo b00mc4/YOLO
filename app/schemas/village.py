@@ -1,17 +1,17 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from app.models.user import UserRole
 from app.schemas.camera import CameraBasicRead
 
 
 class VillageCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=255)
 
 
 class VillageUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
 
 

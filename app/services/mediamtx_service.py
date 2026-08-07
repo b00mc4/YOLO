@@ -60,11 +60,19 @@ async def remove_path(camera_id: uuid.UUID) -> None:
         async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
             response = await client.delete(url, auth=_auth())
     except httpx.HTTPError as exc:
-        logger.warning("MediaMTX remove_path request failed for %s: %s", camera_id, exc)
-        return
+        logger.error("MediaMTX remove_path request failed for %s: %s", camera_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to remove camera stream from MediaMTX",
+        )
+
 
     if response.status_code >= 400 and response.status_code != status.HTTP_404_NOT_FOUND:
-        logger.warning(
+        logger.error(
             "MediaMTX remove_path unexpected status for %s: status=%s body=%s",
             camera_id, response.status_code, response.text,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="MediaMTX rejected the camera stream removal",
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
 import re
@@ -16,15 +16,20 @@ def _validate_password_policy(value: str) -> str:
     return value
 
 class UserCreate(BaseModel):
-    username: str
-    fullname: str
-    email: EmailStr
+    username: str = Field(max_length=255)
+    fullname: str = Field(max_length=255)
+    email: EmailStr = Field(max_length=255)
     role: UserRole
     village_id: uuid.UUID | None = None
 
     @field_validator("username")
     @classmethod
     def normalize_username(cls, v: str) -> str:
+        return v.strip().lower()
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
         return v.strip().lower()
 
     @model_validator(mode="after")
@@ -41,8 +46,8 @@ class UserStatusUpdate(BaseModel):
 
 
 class AdminResetPasswordRequest(BaseModel):
-    new_password: str
-    confirm_new_password: str
+    new_password: str = Field(max_length=128)
+    confirm_new_password: str = Field(max_length=128)
 
     @field_validator("new_password")
     @classmethod

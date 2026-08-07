@@ -240,7 +240,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
             detail="ระบบส่งอีเมลขัดข้องชั่วคราว กรุณาลองใหม่ภายหลัง",
         )
 
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active:

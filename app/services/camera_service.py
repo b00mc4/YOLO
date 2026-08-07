@@ -171,18 +171,38 @@ async def update_camera(
 
     update_data = payload.model_dump(exclude_unset=True)
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
+    is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
 
     if stream_ai_changed:
         await mediamtx_service.upsert_path(camera.id, update_data["stream_ai"])
 
+    if is_active_changed:
+        synced = await ai_vision_service.set_camera_active_status(camera.id, update_data["is_active"])
+        if not synced:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to sync camera status with ai vision service",
+            )
+
     for field, value in update_data.items():
         setattr(camera, field, value)
+
+    if is_active_changed:
+        if update_data["is_active"]:
+            action = "camera_activated"
+            detail = f"camera activated: {camera.name}"
+        else:
+            action = "camera_deactivated"
+            detail = f"camera deactivated: {camera.name}"
+    else:
+        action = "camera_updated"
+        detail = f"camera updated: {camera.name}"
 
     await audit_service.log_action(
         db,
         request,
-        action="camera_updated",
-        detail=f"camera updated: {camera.name}",
+        action=action,
+        detail=detail,
         user_id=current_user.id,
         village_id=camera.village_id,
     )
@@ -197,33 +217,6 @@ async def update_camera(
 async def delete_camera(
     db: AsyncSession,
     request: Request,
-    background_tasks: BackgroundTasks,
-    current_user: User,
-    camera_id: uuid.UUID,
-) -> None:
-    camera = await get_camera(db, current_user, camera_id)
-
-    if not camera.is_active:
-        return
-
-    camera.is_active = False
-
-    await audit_service.log_action(
-        db,
-        request,
-        action="camera_deleted",
-        detail=f"camera deleted: {camera.name}",
-        user_id=current_user.id,
-        village_id=camera.village_id,
-    )
-    await db.commit()
-
-    background_tasks.add_task(ai_vision_service.notify_camera_deactivated, camera.id)
-
-async def hard_delete_camera(
-    db: AsyncSession,
-    request: Request,
-    background_tasks: BackgroundTasks,
     current_user: User,
     camera_id: uuid.UUID,
 ) -> None:
@@ -236,26 +229,25 @@ async def hard_delete_camera(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Camera has detection records and cannot be permanently deleted. "
-                "Use the standard delete endpoint to deactivate it instead."
+                "Camera has detection records and cannot be deleted. "
+                "Deactivate it instead."
             ),
         )
 
     await mediamtx_service.remove_path(camera.id)
+    await ai_vision_service.notify_camera_deleted(camera.id)
 
     await audit_service.log_action(
         db,
         request,
-        action="camera_hard_deleted",
-        detail=f"camera permanently deleted: {camera.name}",
+        action="camera_deleted",
+        detail=f"camera deleted: {camera.name}",
         user_id=current_user.id,
         village_id=camera.village_id,
     )
 
     await db.delete(camera)
     await db.commit()
-
-    background_tasks.add_task(ai_vision_service.notify_camera_deleted, camera_id)
 
 async def resync_camera(
     db: AsyncSession,
