@@ -56,26 +56,3 @@ async def set_camera_active_status(camera_id: uuid.UUID, is_active: bool) -> boo
         return False
 
     return True
-
-
-async def notify_camera_deleted(camera_id: uuid.UUID) -> bool:
-    url = f"{settings.ai_vision_api_url.rstrip('/')}/cameras/{camera_id}"
-
-    try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.delete(
-                url,
-                headers={"X-API-Key": settings.ai_vision_api_key},
-            )
-    except httpx.HTTPError as exc:
-        logger.error("ai vision notify_camera_deleted request failed for %s: %s", camera_id, exc)
-        return False
-
-    if response.status_code >= 400 and response.status_code != 404:
-        logger.error(
-            "ai vision notify_camera_deleted rejected for %s: status=%s body=%s",
-            camera_id, response.status_code, response.text,
-        )
-        return False
-
-    return True

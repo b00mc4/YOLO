@@ -143,6 +143,10 @@ async def _sync_camera_update(
 
 
 async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
+    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
+    if not mediamtx_ok:
+        await _notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
+        
     failed_services: list[str] = []
 
     mediamtx_ok = await mediamtx_service.remove_path(camera_id)
@@ -323,6 +327,15 @@ async def delete_camera(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Camera has detection records and cannot be deleted. "
+                "Deactivate it instead."
+            ),
+        )
+
+    if camera.ai_vision_synced_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Camera is already linked with the AI vision service and cannot be deleted. "
                 "Deactivate it instead."
             ),
         )
