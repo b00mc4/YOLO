@@ -3,11 +3,9 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-
 from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import verify_village_scope
 from app.core.config import get_settings
 from app.db.session import async_session_maker

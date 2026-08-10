@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import require_roles
+from app.api.deps import require_roles, get_current_user
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.camera import (
@@ -41,7 +41,6 @@ async def list_cameras(
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.list_cameras(db, current_user, village_id, is_active, page, page_size)
-
 
 @router.post("/resync-all", response_model=CameraResyncAllRead)
 async def resync_all_cameras(

@@ -13,6 +13,7 @@ from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
 from app.schemas.car import (
+    CameraLiveRead,
     CameraSummary,
     CarDetailRead,
     CarRead,
@@ -22,10 +23,11 @@ from app.schemas.car import (
     DetectionEventCameraGlobal,
     DetectionEventPayload,
     DetectionEventPayloadGlobal,
+    LiveCaptureEntry,
     RepeatedPlateEntry,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service, sse_service, storage_service
+from app.services import audit_service, camera_service, mediamtx_service, sse_service, storage_service
 import logging
 
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
@@ -449,4 +451,41 @@ async def get_today_dashboard(
         blacklist_detections_today=blacklist_detections_today,
         top_repeated_plates=top_repeated_plates,
         latest_detections=latest_detections,
+    )
+
+async def get_camera_live_view(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    camera_id: uuid.UUID,
+    limit: int,
+) -> CameraLiveRead:
+    camera = await camera_service.get_camera(db, current_user, camera_id)
+
+    result = await db.execute(
+        select(Car)
+        .where(Car.camera_id == camera.id)
+        .order_by(Car.time_detect.desc())
+        .limit(limit)
+    )
+
+    latest_captures = [
+        LiveCaptureEntry(
+            time_detect=car.time_detect,
+            license_plate=car.license_plate,
+            province=car.province,
+            color=car.color,
+            image_crop=str(
+                request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+            ),
+        )
+        for car in result.scalars().all()
+    ]
+
+    return CameraLiveRead(
+        camera_id=camera.id,
+        camera_name=camera.name,
+        is_active=camera.is_active,
+        stream_url=mediamtx_service.derive_stream_url(camera.id),
+        latest_captures=latest_captures,
     )

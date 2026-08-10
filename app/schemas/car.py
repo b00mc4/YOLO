@@ -113,3 +113,18 @@ class DetectionEventCameraGlobal(DetectionEventCamera):
  
 class DetectionEventPayloadGlobal(DetectionEventPayload):
     camera: DetectionEventCameraGlobal
+
+class LiveCaptureEntry(BaseModel):
+    time_detect: datetime
+    license_plate: str
+    province: str
+    color: str
+    image_crop: str
+
+
+class CameraLiveRead(BaseModel):
+    camera_id: uuid.UUID
+    camera_name: str
+    is_active: bool
+    stream_url: str
+    latest_captures: list[LiveCaptureEntry]

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, verify_api_key
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.car import CarDetailRead, CarRead, DetectionCreate
+from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 
@@ -35,7 +35,6 @@ async def create_detection(
 async def list_detections(
     request: Request,
     village_id: uuid.UUID | None = Query(default=None),
-    camera_id: uuid.UUID | None = Query(default=None),
     license_plate: str | None = Query(default=None),
     province: str | None = Query(default=None),
     time_detect_from: datetime | None = Query(default=None),
@@ -61,6 +60,15 @@ async def list_detections(
         page_size=page_size,
     )
 
+@router.get("/live", response_model=CameraLiveRead)
+async def get_camera_live(
+    request: Request,
+    camera_id: uuid.UUID = Query(...),
+    limit: int = Query(default=5, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await detection_service.get_camera_live_view(db, request, current_user, camera_id, limit)
 
 @router.get("/{detection_id}", response_model=CarDetailRead)
 async def get_detection_detail(
