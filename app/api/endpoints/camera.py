@@ -58,7 +58,7 @@ async def get_camera(
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await camera_service.get_camera(db, current_user, camera_id)
+    return await camera_service.get_camera_detail(db, current_user, camera_id)
 
 
 @router.patch("/{camera_id}", response_model=CameraRead)

@@ -35,6 +35,7 @@ async def create_detection(
 async def list_detections(
     request: Request,
     village_id: uuid.UUID | None = Query(default=None),
+    camera_id: uuid.UUID | None = Query(default=None),
     license_plate: str | None = Query(default=None),
     province: str | None = Query(default=None),
     time_detect_from: datetime | None = Query(default=None),
@@ -50,6 +51,7 @@ async def list_detections(
         request=request,
         current_user=current_user,
         village_id=village_id,
+        camera_id=camera_id,
         license_plate=license_plate,
         province=province,
         time_detect_from=time_detect_from,

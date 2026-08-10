@@ -345,26 +345,6 @@ async def delete_camera(
 
     background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
-async def resync_camera(
-    db: AsyncSession,
-    current_user: User,
-    camera_id: uuid.UUID,
-) -> CameraResyncRead:
-    camera = await get_camera(db, current_user, camera_id)
-
-    synced = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
-    if not synced:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to sync camera with ai vision service",
-        )
-
-    camera.ai_vision_synced_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(camera)
-
-    return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)
-
 
 def _build_resync_scope_filters(
     current_user: User, village_id_filter: uuid.UUID | None
