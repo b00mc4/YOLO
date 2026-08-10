@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     storage_path: str = "./storage"
 
     frontend_url: str
+    backend_public_url: str
 
     smtp_host: str
     smtp_port: int

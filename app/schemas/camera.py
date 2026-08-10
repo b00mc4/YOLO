@@ -30,6 +30,7 @@ class CameraRead(BaseModel):
     long: float
     stream_ai: str
     stream_url: str
+    webhook_url: str
     ai_vision_synced_at: datetime | None
     created_at: datetime
     is_active: bool

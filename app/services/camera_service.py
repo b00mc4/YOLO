@@ -39,6 +39,7 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         long=camera.long,
         stream_ai=camera.stream_ai,
         stream_url=mediamtx_service.derive_stream_url(camera.id),
+        webhook_url=ai_vision_service.derive_webhook_url(),   # เพิ่ม
         ai_vision_synced_at=camera.ai_vision_synced_at,
         created_at=camera.created_at,
         is_active=camera.is_active,
