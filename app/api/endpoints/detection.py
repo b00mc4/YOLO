@@ -50,7 +50,6 @@ async def list_detections(
         request=request,
         current_user=current_user,
         village_id=village_id,
-        camera_id=camera_id,
         license_plate=license_plate,
         province=province,
         time_detect_from=time_detect_from,
