@@ -16,8 +16,9 @@ from app.services import detection_service
 
 router = APIRouter(prefix="/detections", tags=["detections"])
 
-_URLENCODED_CONTENT_TYPE = "application/x-www-form-urlencoded"
 _MULTIPART_CONTENT_TYPE = "multipart/form-data"
+_TEST_ID_CAMERA = "TEST_Camera_"
+_TEST_ID_EVENT = "TEST_Event_"
 
 
 def _content_type_prefix(request: Request) -> str:
@@ -32,15 +33,19 @@ def _format_validation_error(exc: ValidationError) -> str:
     return "; ".join(messages)
 
 
-async def _handle_connectivity_test(request: Request) -> JSONResponse:
-    form = await request.form()
-    event_id = form.get("event_id")
-    if event_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="event_id is required",
-        )
-    return JSONResponse(status_code=status.HTTP_200_OK, content={"event_id": str(event_id)})
+def _is_webhook_test(raw_event_id: str | None, raw_camera_id: str | None) -> bool:
+    return (
+        isinstance(raw_event_id, str) and raw_event_id.startswith(_TEST_ID_EVENT)
+    ) or (
+        isinstance(raw_camera_id, str) and raw_camera_id.startswith(_TEST_ID_CAMERA)
+    )
+
+
+def _handle_webhook_test(raw_event_id: str | None) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"event_id": raw_event_id, "status": "test_ok"},
+    )
 
 
 async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResponse:
@@ -54,14 +59,20 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
             detail="image_crop and image_full are required files",
         )
 
+    raw_event_id = form.get("event_id")
+    raw_camera_id = form.get("camera_id")
+
+    if _is_webhook_test(raw_event_id, raw_camera_id):
+        return _handle_webhook_test(raw_event_id)
+
     try:
         payload = DetectionCreate(
-            event_id=form.get("event_id"),
-            camera_id=form.get("camera_id"),
+            event_id=raw_event_id,
+            camera_id=raw_camera_id,
             license_plate=form.get("license_plate"),
             province=form.get("province"),
             color=form.get("color"),
-            time_detect=form.get("time_detect"),
+            time_detect=form.get("capture_time"),
         )
     except ValidationError as exc:
         raise HTTPException(
@@ -83,9 +94,6 @@ async def create_detection(
     db: AsyncSession = Depends(get_db),
 ):
     content_type = _content_type_prefix(request)
-
-    if content_type == _URLENCODED_CONTENT_TYPE:
-        return await _handle_connectivity_test(request)
 
     if content_type == _MULTIPART_CONTENT_TYPE:
         return await _handle_real_detection(request, db)
