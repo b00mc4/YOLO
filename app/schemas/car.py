@@ -128,3 +128,6 @@ class CameraLiveRead(BaseModel):
     is_active: bool
     stream_url: str
     latest_captures: list[LiveCaptureEntry]
+
+class DetectionCreateAck(BaseModel):
+    event_id: uuid.UUID

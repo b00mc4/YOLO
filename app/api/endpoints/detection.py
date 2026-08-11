@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate
+from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 
@@ -73,7 +73,11 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(car))
 
 
-@router.post("")
+@router.post(
+    "",
+    response_model=DetectionCreateAck,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_detection(
     request: Request,
     db: AsyncSession = Depends(get_db),

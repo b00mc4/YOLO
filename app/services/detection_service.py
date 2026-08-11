@@ -25,6 +25,7 @@ from app.schemas.car import (
     DetectionEventPayloadGlobal,
     LiveCaptureEntry,
     RepeatedPlateEntry,
+    DetectionCreateAck
 )
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, camera_service, mediamtx_service, sse_service, storage_service
@@ -261,7 +262,7 @@ async def create_detection(
             car.id, car.event_id,
         )
 
-    return _to_car_read(car, request)
+    return DetectionCreateAck(event_id=car.event_id)
 
 
 async def list_detections(
