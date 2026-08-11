@@ -13,13 +13,15 @@ from app.models.user import User
 from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
+import logging
+from starlette.datastructures import UploadFile as StarletteUploadFile
 
 router = APIRouter(prefix="/detections", tags=["detections"])
 
 _MULTIPART_CONTENT_TYPE = "multipart/form-data"
 _TEST_ID_CAMERA = "TEST_Camera_"
 _TEST_ID_EVENT = "TEST_Event_"
-
+logger = logging.getLogger(__name__)
 
 def _content_type_prefix(request: Request) -> str:
     return request.headers.get("content-type", "").split(";")[0].strip().lower()
@@ -51,18 +53,37 @@ def _handle_webhook_test(raw_event_id: str | None) -> JSONResponse:
 async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResponse:
     form = await request.form()
 
+    logger.warning(
+        "detection form debug: content_type=%s keys=%s",
+        request.headers.get("content-type"),
+        [(k, type(v).__name__, getattr(v, "filename", None)) for k, v in form.multi_items()],
+    )
+
+    logger.warning(
+    "detection form values: event_id=%r camera_id=%r",
+    form.get("event_id"), form.get("camera_id"),
+)
+
     image_crop = form.get("image_crop")
     image_full = form.get("image_full")
-    if not isinstance(image_crop, UploadFile) or not isinstance(image_full, UploadFile):
+    logger.warning(
+        "image_crop class=%s module=%s",
+        type(image_crop).__name__, type(image_crop).__module__,
+    )
+
+    if not isinstance(image_crop, StarletteUploadFile) or not isinstance(image_full, StarletteUploadFile):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="image_crop and image_full are required files",
         )
 
     raw_event_id = form.get("event_id")
     raw_camera_id = form.get("camera_id")
 
-    if _is_webhook_test(raw_event_id, raw_camera_id):
+    is_test = _is_webhook_test(raw_event_id, raw_camera_id)
+    logger.warning("is_test=%s event_id=%r camera_id=%r", is_test, raw_event_id, raw_camera_id)
+
+    if is_test:
         return _handle_webhook_test(raw_event_id)
 
     try:
@@ -72,7 +93,7 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
             license_plate=form.get("license_plate"),
             province=form.get("province"),
             color=form.get("color"),
-            time_detect=form.get("capture_time"),
+            capture_time=form.get("capture_time"),
         )
     except ValidationError as exc:
         raise HTTPException(
