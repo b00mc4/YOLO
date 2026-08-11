@@ -37,3 +37,5 @@ mediamtx.exe
 mediamtx.yml
 auto.crt
 auto.key
+
+ngrok.exe
