@@ -3,6 +3,9 @@ import uuid
 from datetime import date, datetime
 from fastapi import Form
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.core.timezone import BANGKOK_TZ
+
+_CAPTURE_TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
 
 
 class DetectionCreate(BaseModel):
@@ -11,12 +14,23 @@ class DetectionCreate(BaseModel):
     license_plate: str = Field(max_length=255)
     province: str = Field(max_length=255)
     color: str = Field(max_length=255)
-    time_detect: datetime
+    capture_time: datetime
 
     @field_validator("license_plate", "province")
     @classmethod
     def normalize(cls, v: str) -> str:
         return v.strip().upper()
+
+    @field_validator("capture_time", mode="before")
+    @classmethod
+    def parse_capture_time(cls, v):
+        if isinstance(v, str):
+            try:
+                parsed = datetime.strptime(v, _CAPTURE_TIME_FORMAT)
+            except ValueError:
+                raise ValueError(f"capture_time must be in format YYYY/MM/DD HH:MM:SS, got: {v!r}")
+            return parsed.replace(tzinfo=BANGKOK_TZ)
+        return v
 
     @classmethod
     def as_form(
@@ -26,7 +40,7 @@ class DetectionCreate(BaseModel):
         license_plate: str = Form(..., max_length=255),
         province: str = Form(..., max_length=255),
         color: str = Form(..., max_length=255),
-        time_detect: datetime = Form(...),
+        capture_time: str = Form(...),
     ) -> DetectionCreate:
         return cls(
             event_id=event_id,
@@ -34,7 +48,7 @@ class DetectionCreate(BaseModel):
             license_plate=license_plate,
             province=province,
             color=color,
-            time_detect=time_detect,
+            capture_time=capture_time,
         )
 
 

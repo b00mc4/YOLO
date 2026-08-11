@@ -53,23 +53,8 @@ def _handle_webhook_test(raw_event_id: str | None) -> JSONResponse:
 async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResponse:
     form = await request.form()
 
-    logger.warning(
-        "detection form debug: content_type=%s keys=%s",
-        request.headers.get("content-type"),
-        [(k, type(v).__name__, getattr(v, "filename", None)) for k, v in form.multi_items()],
-    )
-
-    logger.warning(
-    "detection form values: event_id=%r camera_id=%r",
-    form.get("event_id"), form.get("camera_id"),
-)
-
     image_crop = form.get("image_crop")
     image_full = form.get("image_full")
-    logger.warning(
-        "image_crop class=%s module=%s",
-        type(image_crop).__name__, type(image_crop).__module__,
-    )
 
     if not isinstance(image_crop, StarletteUploadFile) or not isinstance(image_full, StarletteUploadFile):
         raise HTTPException(
@@ -97,7 +82,7 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
         )
     except ValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=_format_validation_error(exc),
         )
 

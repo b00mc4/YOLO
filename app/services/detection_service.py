@@ -30,8 +30,8 @@ from app.schemas.car import (
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, camera_service, mediamtx_service, sse_service, storage_service
 import logging
+from app.core.timezone import BANGKOK_TZ
 
-_BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 logger = logging.getLogger(__name__)
 
 def _to_car_read(car: Car, request: Request) -> CarRead:
@@ -226,7 +226,7 @@ async def create_detection(
         color=payload.color,
         image_crop=crop_path,
         image_full=full_path,
-        time_detect=payload.time_detect,
+        time_detect=payload.capture_time,
         is_blacklist=is_blacklist,
     )
     db.add(car)
@@ -367,7 +367,7 @@ async def get_detection_image_path(
     return absolute_path, storage_service.guess_media_type(absolute_path)
 
 def _today_bangkok_bounds() -> tuple[datetime, datetime, datetime]:
-    now_bangkok = datetime.now(_BANGKOK_TZ)
+    now_bangkok = datetime.now(BANGKOK_TZ)
     start_of_day_bangkok = now_bangkok.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day_bangkok = start_of_day_bangkok + timedelta(days=1)
     return (

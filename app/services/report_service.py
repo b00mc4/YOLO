@@ -9,14 +9,14 @@ from app.models.car import Car
 from app.models.user import User, UserRole
 from app.schemas.car import RepeatedPlateEntry
 from app.schemas.report import HourlyBucket, ReportDailyRead, ReportSummaryRead
+from app.core.timezone import BANGKOK_TZ
 
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _TOP_PLATES_LIMIT = 5
 
 
 def _bangkok_midnight(local_date: date) -> datetime:
-    return datetime(local_date.year, local_date.month, local_date.day, tzinfo=_BANGKOK_TZ)
-
+    return datetime(local_date.year, local_date.month, local_date.day, tzinfo=BANGKOK_TZ)
 
 def _bangkok_day_range_bounds(days: int) -> tuple[date, date, datetime, datetime]:
     today_bangkok = datetime.now(_BANGKOK_TZ).date()
