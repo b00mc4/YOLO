@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from fastapi import HTTPException, Request, status
+from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.camera import Camera
@@ -9,7 +9,7 @@ from app.models.user import User, UserRole
 from app.schemas.camera import CameraBasicRead
 from app.schemas.common import PaginatedResponse
 from app.schemas.village import VillageCreate, VillageDetailRead, VillageMemberSummary, VillageUpdate
-from app.services import audit_service
+from app.services import audit_service, camera_service
 
 async def create_village(
     db: AsyncSession,
@@ -115,6 +115,7 @@ async def list_villages(
 async def update_village(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     village_id: uuid.UUID,
     payload: VillageUpdate,
@@ -129,7 +130,8 @@ async def update_village(
 
     action = "village_updated"
     detail = f"village updated: {village.name}"
-    if "is_active" in update_data and update_data["is_active"] != previous_is_active:
+    is_active_changed = "is_active" in update_data and update_data["is_active"] != previous_is_active
+    if is_active_changed:
         if update_data["is_active"]:
             action = "village_activated"
             detail = f"village activated: {village.name}"
@@ -147,4 +149,11 @@ async def update_village(
     )
     await db.commit()
     await db.refresh(village)
+
+    if is_active_changed:
+        if update_data["is_active"]:
+            background_tasks.add_task(camera_service.activate_village_cameras, village.id)
+        else:
+            background_tasks.add_task(camera_service.deactivate_village_cameras, village.id)
+
     return village
