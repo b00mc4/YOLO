@@ -81,10 +81,22 @@ def _to_car_detail_read(car: Car, camera: Camera, village: Group, request: Reque
 
 
 async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
-    result = await db.execute(select(Camera).where(Camera.id == camera_id))
-    camera = result.scalar_one_or_none()
-    if camera is None:
+    result = await db.execute(
+        select(Camera, Group.is_active)
+        .join(Group, Camera.village_id == Group.id)
+        .where(Camera.id == camera_id)
+    )
+    row = result.one_or_none()
+    if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+
+    camera, village_is_active = row
+
+    if not village_is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Camera's village is inactive and cannot receive detections",
+        )
     if not camera.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -105,11 +117,13 @@ async def _check_is_blacklisted(
     province: str,
 ) -> bool:
     result = await db.execute(
-        select(Blacklist.id).where(
+        select(Blacklist.id)
+        .where(
             Blacklist.village_id == village_id,
             Blacklist.license_plate == license_plate,
             Blacklist.province == province,
         )
+        .limit(1)
     )
     return result.scalar_one_or_none() is not None
 

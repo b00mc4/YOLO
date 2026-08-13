@@ -43,6 +43,32 @@ async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[boo
 
     return ai_vision_ok, failed_services
 
+async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
+    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
+
+    ai_vision_synced = False
+    if ai_vision_pushed:
+        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
+        if active_ok:
+            ai_vision_synced = True
+        else:
+            failed_services.append("ai_vision")
+
+    return ai_vision_synced, failed_services
+
+
+async def _sync_camera_offline(camera_id: uuid.UUID) -> list[str]:
+    failed_services: list[str] = []
+
+    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
+
+    ai_vision_ok = await ai_vision_service.set_camera_active_status(camera_id, False)
+    if not ai_vision_ok:
+        failed_services.append("ai_vision")
+
+    return failed_services
 
 async def _mark_ai_vision_synced(camera_id: uuid.UUID) -> None:
     async with async_session_maker() as db:
@@ -108,15 +134,7 @@ async def _sync_camera_create(
     camera_name: str,
     stream_ai: str,
 ) -> None:
-    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
-
-    ai_vision_synced = False
-    if ai_vision_pushed:
-        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
-        if active_ok:
-            ai_vision_synced = True
-        else:
-            failed_services.append("ai_vision")
+    ai_vision_synced, failed_services = await _sync_camera_online(camera_id, stream_ai)
 
     if ai_vision_synced:
         await _mark_ai_vision_synced(camera_id)
@@ -489,18 +507,18 @@ async def resync_camera_ai_vision(
 
     return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)
 
-async def _remove_path_guarded(
+async def _deactivate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
-) -> tuple[Camera, bool]:
+) -> tuple[Camera, list[str]]:
     async with semaphore:
-        ok = await mediamtx_service.remove_path(camera.id)
-        return camera, ok
-
+        failed_services = await _sync_camera_offline(camera.id)
+        return camera, failed_services
 
 async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
     """
-    Village ถูกปิดใช้งาน (is_active: true -> false) ตัด mediamtx path ของทุกกล้อง
-    ที่ยัง is_active อยู่ในหมู่บ้านนี้ เพื่อไม่ให้สตรีมยังเปิดค้างต่อได้หลัง auth ถูกปิดแล้ว
+    Village ถูกปิดใช้งาน (is_active: true -> false) ตัด mediamtx path และปิดสถานะ
+    active ฝั่ง ai_vision ของทุกกล้องที่ยัง is_active อยู่ในหมู่บ้านนี้ เพื่อไม่ให้สตรีม
+    หรือการรับ detection ยังเปิดค้างต่อได้หลัง village ถูกปิดแล้ว
     """
     async with async_session_maker() as db:
         result = await db.execute(
@@ -513,28 +531,19 @@ async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
  
     semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
     outcomes = await asyncio.gather(
-        *(_remove_path_guarded(semaphore, camera) for camera in cameras)
+        *(_deactivate_camera_guarded(semaphore, camera) for camera in cameras)
     )
  
-    for camera, ok in outcomes:
-        if not ok:
-            await _notify_sync_failure(village_id, camera.id, camera.name, ["mediamtx"])
+    for camera, failed_services in outcomes:
+        if failed_services:
+            await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
 
 async def _activate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
 ) -> tuple[Camera, bool, list[str]]:
     async with semaphore:
-        failed_services: list[str] = []
- 
-        mediamtx_ok = await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
-        if not mediamtx_ok:
-            failed_services.append("mediamtx")
- 
-        ai_vision_ok = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
-        if not ai_vision_ok:
-            failed_services.append("ai_vision")
- 
-        return camera, ai_vision_ok, failed_services
+        ai_vision_synced, failed_services = await _sync_camera_online(camera.id, camera.stream_ai)
+        return camera, ai_vision_synced, failed_services
 
 
 async def activate_village_cameras(village_id: uuid.UUID) -> None:
