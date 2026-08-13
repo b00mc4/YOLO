@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
@@ -48,7 +48,8 @@ async def update_village(
     village_id: uuid.UUID,
     payload: VillageUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await village_service.update_village(db, request, current_user, village_id, payload)
+    return await village_service.update_village(db, request, background_tasks, current_user, village_id, payload)

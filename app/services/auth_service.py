@@ -67,17 +67,22 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     )
     password_ok = verify_password(password, hash_to_check)
 
+    credential_failed = (
+    user is None
+    or user.hashpassword is None
+    or not password_ok
+    )
+
     login_failed = (
-        user is None
-        or user.hashpassword is None
-        or not user.is_active
-        or not user.is_verify
-        or not village_is_active
-        or not password_ok
+    credential_failed
+    or not user.is_active
+    or not user.is_verify
+    or not village_is_active
     )
 
     if login_failed:
-        get_account_locker().register_failure(locker_key)
+        if credential_failed:
+            get_account_locker().register_failure(locker_key)
         await audit_service.log_action(
             db,
             request,

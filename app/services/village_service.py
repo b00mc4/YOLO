@@ -59,7 +59,7 @@ async def get_village_detail(
 
     camera_result = await db.execute(
         select(Camera)
-        .where(Camera.village_id == village_id, Camera.is_active.is_(True))
+        .where(Camera.village_id == village_id)
         .order_by(Camera.created_at.desc())
     )
     cameras = camera_result.scalars().all()

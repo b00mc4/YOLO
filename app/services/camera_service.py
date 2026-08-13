@@ -30,6 +30,28 @@ logger = logging.getLogger(__name__)
 _RESYNC_CONCURRENCY_LIMIT = 10
 
 
+async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
+    failed_services: list[str] = []
+
+    mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
+
+    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
+    if not ai_vision_ok:
+        failed_services.append("ai_vision")
+
+    return ai_vision_ok, failed_services
+
+
+async def _mark_ai_vision_synced(camera_id: uuid.UUID) -> None:
+    async with async_session_maker() as db:
+        result = await db.execute(select(Camera).where(Camera.id == camera_id))
+        camera = result.scalar_one_or_none()
+        if camera is not None:
+            camera.ai_vision_synced_at = datetime.now(timezone.utc)
+            await db.commit()
+
 def _to_camera_read(camera: Camera) -> CameraRead:
     return CameraRead(
         id=camera.id,
@@ -80,6 +102,28 @@ async def _notify_sync_failure(
         },
     )
 
+async def _sync_camera_create(
+    camera_id: uuid.UUID,
+    village_id: uuid.UUID,
+    camera_name: str,
+    stream_ai: str,
+) -> None:
+    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
+
+    ai_vision_synced = False
+    if ai_vision_pushed:
+        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
+        if active_ok:
+            ai_vision_synced = True
+        else:
+            failed_services.append("ai_vision")
+
+    if ai_vision_synced:
+        await _mark_ai_vision_synced(camera_id)
+
+    if failed_services:
+        await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
+
 
 async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
     failed_services: list[str] = []
@@ -107,15 +151,10 @@ async def _sync_camera_update(
     ai_vision_synced = False
 
     if stream_ai is not None:
-        mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
-        if not mediamtx_ok:
-            failed_services.append("mediamtx")
-
-        ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
-        if ai_vision_ok:
+        ai_vision_pushed, stream_failed = await _push_stream_config(camera_id, stream_ai)
+        failed_services.extend(stream_failed)
+        if ai_vision_pushed:
             ai_vision_synced = True
-        else:
-            failed_services.append("ai_vision")
 
     if is_active is not None:
         status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
@@ -125,34 +164,10 @@ async def _sync_camera_update(
             failed_services.append("ai_vision")
 
     if ai_vision_synced:
-        async with async_session_maker() as db:
-            result = await db.execute(select(Camera).where(Camera.id == camera_id))
-            camera = result.scalar_one_or_none()
-            if camera is not None:
-                camera.ai_vision_synced_at = datetime.now(timezone.utc)
-                await db.commit()
+        await _mark_ai_vision_synced(camera_id)
 
     if failed_services:
         await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
-
-
-async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
-    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
-    if not mediamtx_ok:
-        await _notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
-        
-    failed_services: list[str] = []
-
-    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
-    if not mediamtx_ok:
-        failed_services.append("mediamtx")
-
-    ai_vision_ok = await ai_vision_service.notify_camera_deleted(camera_id)
-    if not ai_vision_ok:
-        failed_services.append("ai_vision")
-
-    if failed_services:
-        await _notify_sync_failure(village_id, camera_id, camera_name, failed_services)
 
 
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
@@ -473,3 +488,84 @@ async def resync_camera_ai_vision(
     await db.refresh(camera)
 
     return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)
+
+async def _remove_path_guarded(
+    semaphore: asyncio.Semaphore, camera: Camera
+) -> tuple[Camera, bool]:
+    async with semaphore:
+        ok = await mediamtx_service.remove_path(camera.id)
+        return camera, ok
+
+
+async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
+    """
+    Village ถูกปิดใช้งาน (is_active: true -> false) ตัด mediamtx path ของทุกกล้อง
+    ที่ยัง is_active อยู่ในหมู่บ้านนี้ เพื่อไม่ให้สตรีมยังเปิดค้างต่อได้หลัง auth ถูกปิดแล้ว
+    """
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))
+        )
+        cameras = list(result.scalars().all())
+ 
+    if not cameras:
+        return
+ 
+    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    outcomes = await asyncio.gather(
+        *(_remove_path_guarded(semaphore, camera) for camera in cameras)
+    )
+ 
+    for camera, ok in outcomes:
+        if not ok:
+            await _notify_sync_failure(village_id, camera.id, camera.name, ["mediamtx"])
+
+async def _activate_camera_guarded(
+    semaphore: asyncio.Semaphore, camera: Camera
+) -> tuple[Camera, bool, list[str]]:
+    async with semaphore:
+        failed_services: list[str] = []
+ 
+        mediamtx_ok = await mediamtx_service.upsert_path(camera.id, camera.stream_ai)
+        if not mediamtx_ok:
+            failed_services.append("mediamtx")
+ 
+        ai_vision_ok = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
+        if not ai_vision_ok:
+            failed_services.append("ai_vision")
+ 
+        return camera, ai_vision_ok, failed_services
+
+
+async def activate_village_cameras(village_id: uuid.UUID) -> None:
+    """
+    Village ถูกเปิดใช้งานกลับมา (is_active: false -> true) resync mediamtx path
+    และ ai_vision config ของทุกกล้องที่ is_active อยู่ในหมู่บ้านนี้ ให้กลับมาใช้งานได้
+    เหมือนเดิม โดยไม่ต้องรอ admin สั่ง resync-all เอง
+    """
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))
+        )
+        cameras = list(result.scalars().all())
+ 
+    if not cameras:
+        return
+ 
+    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    outcomes = await asyncio.gather(
+        *(_activate_camera_guarded(semaphore, camera) for camera in cameras)
+    )
+ 
+    synced_camera_ids = [camera.id for camera, ai_vision_synced, _ in outcomes if ai_vision_synced]
+    if synced_camera_ids:
+        async with async_session_maker() as db:
+            result = await db.execute(select(Camera).where(Camera.id.in_(synced_camera_ids)))
+            now = datetime.now(timezone.utc)
+            for db_camera in result.scalars().all():
+                db_camera.ai_vision_synced_at = now
+            await db.commit()
+ 
+    for camera, _, failed_services in outcomes:
+        if failed_services:
+            await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))

@@ -1,26 +1,28 @@
 from __future__ import annotations
-
 import uuid
-
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
 from app.models.user import User, UserRole
 from app.schemas.blacklist import BlacklistCreate, BlacklistRead, BlacklistUpdate
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service
+from app.services import audit_service, village_service
 
 
-def _resolve_village_id(current_user: User, requested_village_id: uuid.UUID | None) -> uuid.UUID:
+async def _resolve_village_id(
+    db: AsyncSession,
+    current_user: User,
+    requested_village_id: uuid.UUID | None,
+) -> uuid.UUID:
     if current_user.role == UserRole.SUPERADMIN:
         if requested_village_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="village_id is required for superadmin",
             )
+        await village_service.get_village(db, requested_village_id)
         return requested_village_id
     return current_user.village_id
 
@@ -39,7 +41,7 @@ async def create_blacklist_entry(
     current_user: User,
     payload: BlacklistCreate,
 ) -> BlacklistRead:
-    village_id = _resolve_village_id(current_user, payload.village_id)
+    village_id = await _resolve_village_id(db, current_user, payload.village_id)
 
     entry = Blacklist(
         village_id=village_id,
