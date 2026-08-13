@@ -5,6 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException, Request, UploadFile, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
@@ -92,13 +93,9 @@ async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
     return camera
 
 
-async def _ensure_event_not_duplicate(db: AsyncSession, event_id: uuid.UUID) -> None:
-    result = await db.execute(select(Car.id).where(Car.event_id == event_id))
-    if result.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Detection event already recorded",
-        )
+async def _find_existing_car_by_event_id(db: AsyncSession, event_id: uuid.UUID) -> Car | None:
+    result = await db.execute(select(Car).where(Car.event_id == event_id))
+    return result.scalar_one_or_none()
 
 
 async def _check_is_blacklisted(
@@ -176,9 +173,25 @@ async def create_detection(
     payload: DetectionCreate,
     image_crop: UploadFile,
     image_full: UploadFile,
-) -> CarRead:
+) -> tuple[DetectionCreateAck, bool]:
+    """
+    สร้าง detection ใหม่จาก webhook ของ AI vision
+
+    Idempotent ตาม event_id: ถ้า event_id นี้เคยถูกบันทึกไปแล้ว (ไม่ว่าจะจากการ
+    ประมวลผลสำเร็จรอบก่อน หรือจาก request คู่แข่งที่ insert ไปพร้อมกัน) จะไม่สร้าง
+    record ใหม่ ไม่เขียนรูปซ้ำ ไม่ publish SSE ซ้ำ แต่ return ack ของ record เดิมกลับไป
+    โดยตัวที่สองของ tuple ที่ return คือ is_new (True = สร้างจริง, False = replay)
+    ผู้เรียกใช้ค่านี้เพื่อเลือกตอบ 201 หรือ 200 กลับไปยัง AI vision
+    """
+    existing = await _find_existing_car_by_event_id(db, payload.event_id)
+    if existing is not None:
+        logger.info(
+            "duplicate detection event replay: event_id=%s detection_id=%s",
+            payload.event_id, existing.id,
+        )
+        return DetectionCreateAck(event_id=existing.event_id), False
+
     camera = await _get_camera_or_404(db, payload.camera_id)
-    await _ensure_event_not_duplicate(db, payload.event_id)
 
     car_id = uuid.uuid4()
 
@@ -242,9 +255,23 @@ async def create_detection(
 
     try:
         await db.commit()
-    except Exception:
+    except IntegrityError as exc:
+        await db.rollback()
+
+        sqlstate = getattr(exc.orig, "sqlstate", None)
+        if sqlstate != "23505":
+            await _cleanup_written_images(written_paths)
+            raise
+
         await _cleanup_written_images(written_paths)
-        raise
+
+        existing = await _find_existing_car_by_event_id(db, payload.event_id)
+        logger.info(
+            "race on duplicate detection event, returning existing record: event_id=%s",
+            payload.event_id,
+        )
+        return DetectionCreateAck(event_id=existing.event_id), False
+
     await db.refresh(car)
 
     try:
@@ -262,7 +289,7 @@ async def create_detection(
             car.id, car.event_id,
         )
 
-    return DetectionCreateAck(event_id=car.event_id)
+    return DetectionCreateAck(event_id=car.event_id), True
 
 
 async def list_detections(

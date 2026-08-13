@@ -86,8 +86,9 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
             detail=_format_validation_error(exc),
         )
 
-    car = await detection_service.create_detection(db, request, payload, image_crop, image_full)
-    return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(car))
+    ack, is_new = await detection_service.create_detection(db, request, payload, image_crop, image_full)
+    status_code = status.HTTP_201_CREATED if is_new else status.HTTP_200_OK
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(ack))
 
 
 @router.post(
@@ -99,6 +100,14 @@ async def create_detection(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    รับ webhook detection จาก AI vision service
+
+    Idempotent ตาม event_id: ถ้า event_id เคยถูกบันทึกแล้ว (retry ซ้ำจาก AI vision
+    เช่น กรณี timeout ไม่ได้รับ response รอบก่อน) จะตอบ 200 พร้อม event_id เดิม
+    แทนที่จะปฏิเสธด้วย 409 เพื่อให้ฝั่ง AI vision รู้ว่า event นี้ถูกรับเรียบร้อยแล้ว
+    ไม่ต้อง retry ต่อ ส่วนกรณีสร้าง record ใหม่จริงจะตอบ 201 ตามปกติ
+    """
     content_type = _content_type_prefix(request)
 
     if content_type == _MULTIPART_CONTENT_TYPE:

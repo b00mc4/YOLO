@@ -81,22 +81,15 @@ async def _notify_sync_failure(
     )
 
 
-async def _sync_camera_create(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str, stream_ai: str) -> None:
+async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
     failed_services: list[str] = []
 
-    mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
     if not mediamtx_ok:
         failed_services.append("mediamtx")
 
-    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
-    if ai_vision_ok:
-        async with async_session_maker() as db:
-            result = await db.execute(select(Camera).where(Camera.id == camera_id))
-            camera = result.scalar_one_or_none()
-            if camera is not None:
-                camera.ai_vision_synced_at = datetime.now(timezone.utc)
-                await db.commit()
-    else:
+    ai_vision_ok = await ai_vision_service.notify_camera_deleted(camera_id)
+    if not ai_vision_ok:
         failed_services.append("ai_vision")
 
     if failed_services:
