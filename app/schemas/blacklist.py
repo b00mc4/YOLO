@@ -18,7 +18,14 @@ class BlacklistCreate(BaseModel):
 
 
 class BlacklistUpdate(BaseModel):
-    reason: str = Field(max_length=255)
+    license_plate: str | None = Field(default=None, max_length=255)
+    province: str | None = Field(default=None, max_length=255)
+    reason: str | None = Field(default=None, max_length=255)
+
+    @field_validator("license_plate", "province")
+    @classmethod
+    def normalize(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v is not None else v
 
 
 class BlacklistRead(BaseModel):
