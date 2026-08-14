@@ -513,12 +513,16 @@ async def get_camera_live_view(
 
     latest_captures = [
         LiveCaptureEntry(
+            id=car.id,
             time_detect=car.time_detect,
             license_plate=car.license_plate,
             province=car.province,
             color=car.color,
             image_crop=str(
                 request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+            ),
+            image_full=str(
+                request.url_for("get_detection_image", detection_id=car.id, variant="full")
             ),
         )
         for car in result.scalars().all()
