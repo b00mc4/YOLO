@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     frontend_url: str
     backend_public_url: str
 
+    cors_allowed_origins: str
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
     smtp_host: str
     smtp_port: int
     smtp_user: str
