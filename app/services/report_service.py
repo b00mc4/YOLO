@@ -112,13 +112,21 @@ async def _hourly_buckets(db: AsyncSession, base_filters: list) -> list[HourlyBu
 
 
 async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
+    hourly_buckets = await _hourly_buckets(db, base_filters)
     return {
         "total_detections": await _count_total(db, base_filters),
         "unique_plates": await _count_unique_plates(db, base_filters),
         "blacklist_detections": await _count_blacklist(db, base_filters),
         "top_repeated_plates": await _top_repeated_plates(db, base_filters),
-        "hourly_buckets": await _hourly_buckets(db, base_filters),
+        "hourly_buckets": hourly_buckets,
+        "peak_time": _compute_peak_time(hourly_buckets),
     }
+
+def _compute_peak_time(hourly_buckets: list[HourlyBucket]) -> str:
+    peak_bucket = max(hourly_buckets, key=lambda b: b.count)
+    if peak_bucket.count == 0:
+        return "N/A"
+    return f"{peak_bucket.hour:02d}:00-{peak_bucket.hour:02d}:59"
 
 
 async def get_report_summary(

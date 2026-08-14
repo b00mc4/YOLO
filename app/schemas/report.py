@@ -13,6 +13,7 @@ class ReportMetrics(BaseModel):
     total_detections: int
     unique_plates: int
     blacklist_detections: int
+    peak_time: str
     top_repeated_plates: list[RepeatedPlateEntry]
     hourly_buckets: list[HourlyBucket]
 

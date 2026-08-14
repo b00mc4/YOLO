@@ -144,18 +144,9 @@ async def _sync_camera_create(
 
 
 async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
-    failed_services: list[str] = []
-
     mediamtx_ok = await mediamtx_service.remove_path(camera_id)
     if not mediamtx_ok:
-        failed_services.append("mediamtx")
-
-    ai_vision_ok = await ai_vision_service.notify_camera_deleted(camera_id)
-    if not ai_vision_ok:
-        failed_services.append("ai_vision")
-
-    if failed_services:
-        await _notify_sync_failure(village_id, camera_id, camera_name, failed_services)
+        await _notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
 
 
 async def _sync_camera_update(
@@ -206,7 +197,7 @@ async def create_camera(
         village_id = current_user.village_id
     else:
         village_id = payload.village_id
-        await _get_village_or_404(db, village_id)
+    village = await _get_village_or_404(db, village_id)
 
     camera = Camera(
         village_id=village_id,
@@ -230,9 +221,14 @@ async def create_camera(
     await db.commit()
     await db.refresh(camera)
 
-    background_tasks.add_task(
-        _sync_camera_create, camera.id, camera.village_id, camera.name, camera.stream_ai
-    )
+    if village.is_active:
+        background_tasks.add_task(
+            _sync_camera_create, camera.id, camera.village_id, camera.name, camera.stream_ai
+        )
+    else:
+        logger.info(
+            "Skipping camera sync for %s: village %s is inactive", camera.id, village_id
+        )
 
     return _to_camera_read(camera)
 
@@ -295,6 +291,7 @@ async def update_camera(
     payload: CameraUpdate,
 ) -> CameraRead:
     camera = await get_camera(db, current_user, camera_id)
+    village = await _get_village_or_404(db, camera.village_id)
 
     update_data = payload.model_dump(exclude_unset=True)
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
@@ -325,7 +322,7 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
 
-    if stream_ai_changed or is_active_changed:
+    if (stream_ai_changed or is_active_changed) and village.is_active:
         background_tasks.add_task(
             _sync_camera_update,
             camera.id,
@@ -333,6 +330,10 @@ async def update_camera(
             camera.name,
             camera.stream_ai if stream_ai_changed else None,
             camera.is_active if is_active_changed else None,
+        )
+    elif stream_ai_changed or is_active_changed:
+        logger.info(
+            "Skipping camera sync for %s: village %s is inactive", camera.id, camera.village_id
         )
 
     return _to_camera_read(camera)
