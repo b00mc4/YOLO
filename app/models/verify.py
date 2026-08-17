@@ -18,7 +18,7 @@ class Verify(Base):
     __tablename__ = "VerifyTABLE"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(SAEnum(VerifyType, name="verify_type"), nullable=False)
     token_hash = Column(String(255), nullable=False, index=True)
     expire_at = Column(DateTime(timezone=True), nullable=False)

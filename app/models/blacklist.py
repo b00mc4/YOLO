@@ -24,7 +24,7 @@ class Blacklist(Base):
     license_plate = Column(String(255), nullable=False)
     province = Column(String(255), nullable=False)
     reason = Column(String(255), nullable=False)
-    added_by = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id"), nullable=False, index=True)
+    added_by = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     village = relationship("Group", back_populates="blacklist_entries")

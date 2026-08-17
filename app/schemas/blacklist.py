@@ -36,5 +36,5 @@ class BlacklistRead(BaseModel):
     license_plate: str
     province: str
     reason: str
-    added_by: uuid.UUID
+    added_by: uuid.UUID | None
     created_at: datetime

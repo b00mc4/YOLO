@@ -117,3 +117,14 @@ async def unlock_user_account(
 ):
     username = await user_service.unlock_user_account(db, request, current_user, user_id)
     return MessageResponse(detail=f"ปลดล็อคบัญชี {username} สำเร็จ")
+
+
+@router.delete("/{user_id}", response_model=MessageResponse)
+async def delete_user(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    username = await user_service.delete_user(db, request, current_user, user_id)
+    return MessageResponse(detail=f"ลบผู้ใช้ {username} สำเร็จ")
