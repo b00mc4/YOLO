@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.core.config import get_settings
+from app.core.rate_limit import get_rate_limiter
 from app.db.session import async_session_maker
 from app.models.camera import Camera, CameraVerificationStatus
 from app.models.car import Car
@@ -19,14 +20,18 @@ from app.schemas.camera import (
     CameraResyncFailedEntry,
     CameraStatusRead,
     CameraUpdate,
+    CameraVerificationCheckRead,
 )
 from app.schemas.common import PaginatedResponse
 from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service
+from app.services.ai_vision_service import VerificationCheckResult
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 _RESYNC_CONCURRENCY_LIMIT = 10
+_MANUAL_VERIFY_RATE_LIMIT = 1
+_MANUAL_VERIFY_RATE_WINDOW_SECONDS = 30.0
 
 
 async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
@@ -525,6 +530,99 @@ async def resync_camera_ai_vision(
     camera_verification_service.start_verification(camera.id)
 
     return _to_camera_read(camera)
+
+
+async def check_camera_verification_now(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    camera_id: uuid.UUID,
+) -> CameraVerificationCheckRead:
+    camera = await get_camera(db, current_user, camera_id)
+
+    get_rate_limiter().check(
+        f"manual_verify_check:{camera_id}",
+        _MANUAL_VERIFY_RATE_LIMIT,
+        _MANUAL_VERIFY_RATE_WINDOW_SECONDS,
+    )
+
+    result = await ai_vision_service.check_camera_verification(camera.id)
+    ai_vision_reachable = result != VerificationCheckResult.UNREACHABLE
+    is_pending_locally = camera.verification_status == CameraVerificationStatus.PENDING
+
+    polling_restarted = False
+    anomaly_detected = False
+    note: str | None = None
+
+    if result == VerificationCheckResult.UNREACHABLE:
+        note = "ไม่สามารถติดต่อ ai vision service ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง"
+
+    elif result == VerificationCheckResult.PENDING:
+        if not camera_verification_service.is_verification_running(camera.id):
+            camera_verification_service.start_verification(camera.id)
+            polling_restarted = True
+
+    elif result == VerificationCheckResult.VERIFIED:
+        if is_pending_locally:
+            await camera_verification_service.finalize_verification(
+                camera.id,
+                verified=True,
+                reason="verified by ai vision service",
+                request=request,
+                user_id=current_user.id,
+            )
+            await db.refresh(camera)
+        elif camera.verification_status == CameraVerificationStatus.FAILED:
+            anomaly_detected = True
+            note = (
+                f"ai vision service รายงานว่ากล้อง '{camera.name}' verified แล้ว แต่ในระบบเราบันทึกสถานะเป็น "
+                "failed อยู่ ระบบไม่ได้แก้สถานะให้อัตโนมัติ กรุณาใช้ resync-ai-vision หากต้องการยืนยันซ้ำ"
+            )
+
+    elif result == VerificationCheckResult.NOT_FOUND:
+        if is_pending_locally:
+            await camera_verification_service.finalize_verification(
+                camera.id,
+                verified=False,
+                reason="ai vision service exceeded its verification retry quota and removed the camera",
+                request=request,
+                user_id=current_user.id,
+            )
+            await db.refresh(camera)
+        elif camera.verification_status == CameraVerificationStatus.VERIFIED:
+            anomaly_detected = True
+            note = (
+                f"ai vision service ไม่พบกล้อง '{camera.name}' แล้ว (อาจถูกลบฝั่งเขา) แต่ในระบบเรายังบันทึกสถานะ"
+                f" เป็น verified และ is_active={camera.is_active} อยู่ ระบบไม่ได้ปิดกล้องอัตโนมัติเพื่อป้องกัน "
+                "false negative กรุณาตรวจสอบด้วยตนเองก่อนตัดสินใจ"
+            )
+
+    if anomaly_detected:
+        await audit_service.log_action(
+            db,
+            request,
+            action="camera_verification_anomaly",
+            detail=(
+                f"anomaly on manual verification check for '{camera.name}': ai vision reports "
+                f"{result.value} but local status is {camera.verification_status.value} "
+                f"(is_active={camera.is_active}); no changes applied"
+            ),
+            user_id=current_user.id,
+            village_id=camera.village_id,
+        )
+        await db.commit()
+
+    return CameraVerificationCheckRead(
+        id=camera.id,
+        verification_status=camera.verification_status,
+        is_active=camera.is_active,
+        ai_vision_synced_at=camera.ai_vision_synced_at,
+        ai_vision_reachable=ai_vision_reachable,
+        polling_restarted=polling_restarted,
+        anomaly_detected=anomaly_detected,
+        note=note,
+    )
+
 
 async def _deactivate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera

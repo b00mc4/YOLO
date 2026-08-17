@@ -4,6 +4,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from time import monotonic
+from fastapi import Request
 from sqlalchemy import select
 from app.db.session import async_session_maker
 from app.models.camera import Camera, CameraVerificationStatus
@@ -31,6 +32,11 @@ def cancel_verification(camera_id: uuid.UUID) -> None:
     task = _verification_tasks.pop(camera_id, None)
     if task is not None and not task.done():
         task.cancel()
+
+
+def is_verification_running(camera_id: uuid.UUID) -> bool:
+    task = _verification_tasks.get(camera_id)
+    return task is not None and not task.done()
 
 
 async def _run_verification_loop(camera_id: uuid.UUID) -> None:
@@ -72,7 +78,13 @@ async def _run_verification_loop(camera_id: uuid.UUID) -> None:
         _verification_tasks.pop(camera_id, None)
 
 
-async def _finalize(camera_id: uuid.UUID, verified: bool, reason: str) -> None:
+async def _finalize(
+    camera_id: uuid.UUID,
+    verified: bool,
+    reason: str,
+    request: Request | None = None,
+    user_id: uuid.UUID | None = None,
+) -> None:
     async with async_session_maker() as db:
         result = await db.execute(select(Camera).where(Camera.id == camera_id))
         camera = result.scalar_one_or_none()
@@ -90,8 +102,16 @@ async def _finalize(camera_id: uuid.UUID, verified: bool, reason: str) -> None:
             action = "camera_verification_failed"
             detail = f"camera verification failed for '{camera.name}': {reason}"
 
+        if user_id is not None:
+            detail = f"{detail} (manual check)"
+
         await audit_service.log_action(
-            db, request=None, action=action, detail=detail, village_id=camera.village_id,
+            db,
+            request,
+            action=action,
+            detail=detail,
+            user_id=user_id,
+            village_id=camera.village_id,
         )
         await db.commit()
 
@@ -112,6 +132,16 @@ async def _finalize(camera_id: uuid.UUID, verified: bool, reason: str) -> None:
     }
     await sse_service.publish(village_id, event, payload)
     await sse_service.publish_global(event, {**payload, "village_id": str(village_id)})
+
+
+async def finalize_verification(
+    camera_id: uuid.UUID,
+    verified: bool,
+    reason: str,
+    request: Request | None = None,
+    user_id: uuid.UUID | None = None,
+) -> None:
+    await _finalize(camera_id, verified=verified, reason=reason, request=request, user_id=user_id)
 
 
 async def resume_pending_verifications() -> None:

@@ -65,3 +65,14 @@ class CameraResyncAllRead(BaseModel):
     succeeded: int
     failed: int
     failed_cameras: list[CameraResyncFailedEntry]
+
+
+class CameraVerificationCheckRead(BaseModel):
+    id: uuid.UUID
+    verification_status: CameraVerificationStatus
+    is_active: bool
+    ai_vision_synced_at: datetime | None
+    ai_vision_reachable: bool
+    polling_restarted: bool
+    anomaly_detected: bool
+    note: str | None

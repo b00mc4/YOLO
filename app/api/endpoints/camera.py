@@ -11,6 +11,7 @@ from app.schemas.camera import (
     CameraResyncAllRead,
     CameraStatusRead,
     CameraUpdate,
+    CameraVerificationCheckRead,
 )
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import camera_service
@@ -90,6 +91,16 @@ async def resync_camera_ai_vision(
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.resync_camera_ai_vision(db, request, current_user, camera_id)
+
+
+@router.post("/{camera_id}/verification-check", response_model=CameraVerificationCheckRead)
+async def check_camera_verification(
+    camera_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.check_camera_verification_now(db, request, current_user, camera_id)
 
 
 @router.delete("/{camera_id}", response_model=MessageResponse)
