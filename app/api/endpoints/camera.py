@@ -9,7 +9,7 @@ from app.schemas.camera import (
     CameraCreate,
     CameraRead,
     CameraResyncAllRead,
-    CameraResyncRead,
+    CameraStatusRead,
     CameraUpdate,
 )
 from app.schemas.common import MessageResponse, PaginatedResponse
@@ -61,6 +61,15 @@ async def get_camera(
     return await camera_service.get_camera_detail(db, current_user, camera_id)
 
 
+@router.get("/{camera_id}/status", response_model=CameraStatusRead)
+async def get_camera_status(
+    camera_id: uuid.UUID,
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.get_camera_status(db, current_user, camera_id)
+
+
 @router.patch("/{camera_id}", response_model=CameraRead)
 async def update_camera(
     camera_id: uuid.UUID,
@@ -73,7 +82,7 @@ async def update_camera(
     return await camera_service.update_camera(db, request, background_tasks, current_user, camera_id, payload)
 
 
-@router.post("/{camera_id}/resync-ai-vision", response_model=CameraResyncRead)
+@router.post("/{camera_id}/resync-ai-vision", response_model=CameraRead)
 async def resync_camera_ai_vision(
     camera_id: uuid.UUID,
     request: Request,

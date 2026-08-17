@@ -66,3 +66,27 @@ async def remove_path(camera_id: uuid.UUID) -> bool:
         return False
 
     return True
+
+async def get_path_status(camera_id: uuid.UUID) -> bool | None:
+    path_name = _path_name(camera_id)
+    url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/paths/get/{path_name}"
+
+    try:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.get(url, auth=_auth())
+    except httpx.HTTPError as exc:
+        logger.error("MediaMTX get_path_status request failed for %s: %s", camera_id, exc)
+        return None
+
+    if response.status_code == 404:
+        return None
+
+    if response.status_code >= 400:
+        logger.error(
+            "MediaMTX get_path_status unexpected status for %s: status=%s body=%s",
+            camera_id, response.status_code, response.text,
+        )
+        return None
+
+    body = response.json()
+    return body.get("source") is not None

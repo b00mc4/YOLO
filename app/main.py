@@ -9,7 +9,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import camera_service
+from app.services import camera_service, camera_verification_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -39,17 +39,28 @@ async def _startup_camera_resync_background() -> None:
     )
 
 
+async def _resume_camera_verification_background() -> None:
+    try:
+        await camera_verification_service.resume_pending_verifications()
+    except Exception:
+        logger.exception("Failed to resume pending camera verifications on startup")
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     resync_task = asyncio.create_task(_startup_camera_resync_background())
     app.state.startup_resync_task = resync_task
 
+    verification_resume_task = asyncio.create_task(_resume_camera_verification_background())
+    app.state.startup_verification_resume_task = verification_resume_task
+
     yield
 
-    if not resync_task.done():
-        resync_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await resync_task
+    for task in (resync_task, verification_resume_task):
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
 
 app = FastAPI(title="License Plate Detection API", lifespan=lifespan)

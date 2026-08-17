@@ -1,11 +1,20 @@
+import enum
 import uuid
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Boolean, true
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+
+
+class CameraVerificationStatus(str, enum.Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    FAILED = "failed"
+
 
 class Camera(Base):
     __tablename__ = "CameraTABLE"
@@ -16,6 +25,15 @@ class Camera(Base):
     lat = Column(Float(53), nullable=False)
     long = Column(Float(53), nullable=False)
     stream_ai = Column(String(255), nullable=False)
+    verification_status = Column(
+        SAEnum(
+            CameraVerificationStatus,
+            name="camera_verification_status",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        server_default=CameraVerificationStatus.PENDING.value,
+    )
     ai_vision_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active = Column(Boolean, nullable=False, server_default=true())

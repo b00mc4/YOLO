@@ -2,14 +2,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
 from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.core.config import get_settings
 from app.db.session import async_session_maker
-from app.models.camera import Camera
+from app.models.camera import Camera, CameraVerificationStatus
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
@@ -18,11 +17,11 @@ from app.schemas.camera import (
     CameraRead,
     CameraResyncAllRead,
     CameraResyncFailedEntry,
-    CameraResyncRead,
+    CameraStatusRead,
     CameraUpdate,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import ai_vision_service, audit_service, mediamtx_service
+from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -46,15 +45,15 @@ async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[boo
 async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
     ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
 
-    ai_vision_synced = False
+    should_verify = False
     if ai_vision_pushed:
         active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
         if active_ok:
-            ai_vision_synced = True
+            should_verify = True
         else:
             failed_services.append("ai_vision")
 
-    return ai_vision_synced, failed_services
+    return should_verify, failed_services
 
 
 async def _sync_camera_offline(camera_id: uuid.UUID) -> list[str]:
@@ -70,14 +69,6 @@ async def _sync_camera_offline(camera_id: uuid.UUID) -> list[str]:
 
     return failed_services
 
-async def _mark_ai_vision_synced(camera_id: uuid.UUID) -> None:
-    async with async_session_maker() as db:
-        result = await db.execute(select(Camera).where(Camera.id == camera_id))
-        camera = result.scalar_one_or_none()
-        if camera is not None:
-            camera.ai_vision_synced_at = datetime.now(timezone.utc)
-            await db.commit()
-
 def _to_camera_read(camera: Camera) -> CameraRead:
     return CameraRead(
         id=camera.id,
@@ -87,7 +78,8 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         long=camera.long,
         stream_ai=camera.stream_ai,
         stream_url=mediamtx_service.derive_stream_url(camera.id),
-        webhook_url=ai_vision_service.derive_webhook_url(),   # เพิ่ม
+        webhook_url=ai_vision_service.derive_webhook_url(),
+        verification_status=camera.verification_status,
         ai_vision_synced_at=camera.ai_vision_synced_at,
         created_at=camera.created_at,
         is_active=camera.is_active,
@@ -134,10 +126,10 @@ async def _sync_camera_create(
     camera_name: str,
     stream_ai: str,
 ) -> None:
-    ai_vision_synced, failed_services = await _sync_camera_online(camera_id, stream_ai)
+    should_verify, failed_services = await _sync_camera_online(camera_id, stream_ai)
 
-    if ai_vision_synced:
-        await _mark_ai_vision_synced(camera_id)
+    if should_verify:
+        camera_verification_service.start_verification(camera_id)
 
     if failed_services:
         await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
@@ -157,23 +149,21 @@ async def _sync_camera_update(
     is_active: bool | None,
 ) -> None:
     failed_services: list[str] = []
-    ai_vision_synced = False
+    should_verify = False
 
     if stream_ai is not None:
         ai_vision_pushed, stream_failed = await _push_stream_config(camera_id, stream_ai)
         failed_services.extend(stream_failed)
         if ai_vision_pushed:
-            ai_vision_synced = True
+            should_verify = True
 
     if is_active is not None:
         status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
-        if status_ok:
-            ai_vision_synced = True
-        else:
+        if not status_ok:
             failed_services.append("ai_vision")
 
-    if ai_vision_synced:
-        await _mark_ai_vision_synced(camera_id)
+    if should_verify:
+        camera_verification_service.start_verification(camera_id)
 
     if failed_services:
         await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
@@ -206,6 +196,7 @@ async def create_camera(
         long=payload.long,
         stream_ai=payload.stream_ai,
         is_active=True,
+        verification_status=CameraVerificationStatus.PENDING,
     )
     db.add(camera)
     await db.flush()
@@ -245,6 +236,17 @@ async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID)
 async def get_camera_detail(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> CameraRead:
     camera = await get_camera(db, current_user, camera_id)
     return _to_camera_read(camera)
+
+async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> CameraStatusRead:
+    camera = await get_camera(db, current_user, camera_id)
+    stream_online = await mediamtx_service.get_path_status(camera.id)
+
+    return CameraStatusRead(
+        id=camera.id,
+        is_active=camera.is_active,
+        verification_status=camera.verification_status,
+        stream_online=stream_online,
+    )
 
 async def list_cameras(
     db: AsyncSession,
@@ -302,6 +304,9 @@ async def update_camera(
 
     for field, value in update_data.items():
         setattr(camera, field, value)
+
+    if stream_ai_changed:
+        camera.verification_status = CameraVerificationStatus.PENDING
 
     if is_active_changed:
         if update_data["is_active"]:
@@ -387,6 +392,7 @@ async def delete_camera(
     await db.delete(camera)
     await db.commit()
 
+    camera_verification_service.cancel_verification(camera_id_value)
     background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
 
@@ -485,23 +491,30 @@ async def resync_camera_ai_vision(
     request: Request,
     current_user: User,
     camera_id: uuid.UUID,
-) -> CameraResyncRead:
+) -> CameraRead:
     camera = await get_camera(db, current_user, camera_id)
 
-    synced = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
-    if not synced:
+    pushed = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
+    if not pushed:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to sync camera with ai vision service",
         )
 
-    camera.ai_vision_synced_at = datetime.now(timezone.utc)
+    active_ok = await ai_vision_service.set_camera_active_status(camera.id, True)
+    if not active_ok:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to sync camera with ai vision service",
+        )
+
+    camera.verification_status = CameraVerificationStatus.PENDING
 
     await audit_service.log_action(
         db,
         request,
         action="camera_resync_ai_vision",
-        detail=f"resynced camera with ai vision service: {camera.name}",
+        detail=f"triggered re-verification with ai vision service: {camera.name}",
         user_id=current_user.id,
         village_id=camera.village_id,
     )
@@ -509,7 +522,9 @@ async def resync_camera_ai_vision(
     await db.commit()
     await db.refresh(camera)
 
-    return CameraResyncRead(id=camera.id, ai_vision_synced_at=camera.ai_vision_synced_at)
+    camera_verification_service.start_verification(camera.id)
+
+    return _to_camera_read(camera)
 
 async def _deactivate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
@@ -546,15 +561,16 @@ async def _activate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
 ) -> tuple[Camera, bool, list[str]]:
     async with semaphore:
-        ai_vision_synced, failed_services = await _sync_camera_online(camera.id, camera.stream_ai)
-        return camera, ai_vision_synced, failed_services
+        should_verify, failed_services = await _sync_camera_online(camera.id, camera.stream_ai)
+        return camera, should_verify, failed_services
 
 
 async def activate_village_cameras(village_id: uuid.UUID) -> None:
     """
     Village ถูกเปิดใช้งานกลับมา (is_active: false -> true) resync mediamtx path
     และ ai_vision config ของทุกกล้องที่ is_active อยู่ในหมู่บ้านนี้ ให้กลับมาใช้งานได้
-    เหมือนเดิม โดยไม่ต้องรอ admin สั่ง resync-all เอง
+    เหมือนเดิม โดยไม่ต้องรอ admin สั่ง resync-all เอง เพราะ re-POST ไปหา ai_vision
+    ใหม่ ทุกตัวจะถูก reset เป็น pending แล้วเข้า verify loop เหมือนสร้างกล้องใหม่
     """
     async with async_session_maker() as db:
         result = await db.execute(
@@ -570,14 +586,15 @@ async def activate_village_cameras(village_id: uuid.UUID) -> None:
         *(_activate_camera_guarded(semaphore, camera) for camera in cameras)
     )
  
-    synced_camera_ids = [camera.id for camera, ai_vision_synced, _ in outcomes if ai_vision_synced]
-    if synced_camera_ids:
+    verifying_camera_ids = [camera.id for camera, should_verify, _ in outcomes if should_verify]
+    if verifying_camera_ids:
         async with async_session_maker() as db:
-            result = await db.execute(select(Camera).where(Camera.id.in_(synced_camera_ids)))
-            now = datetime.now(timezone.utc)
+            result = await db.execute(select(Camera).where(Camera.id.in_(verifying_camera_ids)))
             for db_camera in result.scalars().all():
-                db_camera.ai_vision_synced_at = now
+                db_camera.verification_status = CameraVerificationStatus.PENDING
             await db.commit()
+        for camera_id in verifying_camera_ids:
+            camera_verification_service.start_verification(camera_id)
  
     for camera, _, failed_services in outcomes:
         if failed_services:
