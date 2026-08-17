@@ -320,15 +320,8 @@ async def list_detections(
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
-    stmt = select(Car).join(Camera, Car.camera_id == Camera.id)
-
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id is not None:
-            stmt = stmt.where(Camera.village_id == village_id)
-    else:
-        stmt = stmt.where(Camera.village_id == current_user.village_id)
-        if village_id is not None:
-            stmt = stmt.where(Camera.village_id == village_id)
+    scope_filters = _build_detection_list_scope_filters(current_user, village_id)
+    stmt = select(Car).join(Camera, Car.camera_id == Camera.id).where(*scope_filters)
 
     if camera_id is not None:
         stmt = stmt.where(Car.camera_id == camera_id)
@@ -425,6 +418,21 @@ def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.U
         if village_id_filter is not None:
             return [Camera.village_id == village_id_filter]
         return []
+    return [Camera.village_id == current_user.village_id]
+
+def _build_detection_list_scope_filters(
+    current_user: User, village_id_filter: uuid.UUID | None
+) -> list:
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is not None:
+            return [Camera.village_id == village_id_filter]
+        return []
+
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to specify village_id for this role",
+        )
     return [Camera.village_id == current_user.village_id]
 
 

@@ -83,6 +83,20 @@ def _verify_password_reset_scope(current_user: User, target: User) -> None:
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
+def _build_user_list_village_scope_filters(
+    current_user: User, village_id_filter: uuid.UUID | None
+) -> list:
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is not None:
+            return [User.village_id == village_id_filter]
+        return []
+
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to specify village_id for this role",
+        )
+    return [User.village_id == current_user.village_id]
 
 def _build_user_list_filters(
     current_user: User,
@@ -91,15 +105,7 @@ def _build_user_list_filters(
     is_active_filter: bool | None,
     search: str | None,
 ) -> list:
-    filters = []
-
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id_filter is not None:
-            filters.append(User.village_id == village_id_filter)
-    else:
-        filters.append(User.village_id == current_user.village_id)
-        if village_id_filter is not None:
-            filters.append(User.village_id == village_id_filter)
+    filters = _build_user_list_village_scope_filters(current_user, village_id_filter)
 
     if role_filter is not None:
         filters.append(User.role == role_filter)

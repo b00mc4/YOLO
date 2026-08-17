@@ -34,6 +34,20 @@ async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Blacklist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blacklist entry not found")
     return entry
 
+def _build_blacklist_list_scope_filters(
+    current_user: User, village_id_filter: uuid.UUID | None
+) -> list:
+    if current_user.role == UserRole.SUPERADMIN:
+        if village_id_filter is not None:
+            return [Blacklist.village_id == village_id_filter]
+        return []
+
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to specify village_id for this role",
+        )
+    return [Blacklist.village_id == current_user.village_id]
 
 async def create_blacklist_entry(
     db: AsyncSession,
@@ -75,15 +89,8 @@ async def list_blacklist_entries(
     page: int,
     page_size: int,
 ) -> PaginatedResponse[BlacklistRead]:
-    stmt = select(Blacklist)
-
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id is not None:
-            stmt = stmt.where(Blacklist.village_id == village_id)
-    else:
-        stmt = stmt.where(Blacklist.village_id == current_user.village_id)
-        if village_id is not None:
-            stmt = stmt.where(Blacklist.village_id == village_id)
+    scope_filters = _build_blacklist_list_scope_filters(current_user, village_id)
+    stmt = select(Blacklist).where(*scope_filters)
 
     if license_plate is not None:
         stmt = stmt.where(Blacklist.license_plate.ilike(f"%{license_plate}%"))

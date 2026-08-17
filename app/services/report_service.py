@@ -2,6 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.camera import Camera
@@ -40,10 +41,13 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
         if village_id_filter is not None:
             return [Camera.village_id == village_id_filter]
         return []
-    filters = [Camera.village_id == current_user.village_id]
-    if village_id_filter is not None:
-        filters.append(Camera.village_id == village_id_filter)
-    return filters
+
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to specify village_id for this role",
+        )
+    return [Camera.village_id == current_user.village_id]
 
 
 async def _count_total(db: AsyncSession, base_filters: list) -> int:
