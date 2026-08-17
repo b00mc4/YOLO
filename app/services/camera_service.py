@@ -260,6 +260,9 @@ async def list_cameras(
     if current_user.role == UserRole.ADMIN:
         stmt = stmt.where(Camera.village_id == current_user.village_id)
         count_stmt = count_stmt.where(Camera.village_id == current_user.village_id)
+        if village_id_filter is not None:
+            stmt = stmt.where(Camera.village_id == village_id_filter)
+            count_stmt = count_stmt.where(Camera.village_id == village_id_filter)
     elif village_id_filter is not None:
         stmt = stmt.where(Camera.village_id == village_id_filter)
         count_stmt = count_stmt.where(Camera.village_id == village_id_filter)

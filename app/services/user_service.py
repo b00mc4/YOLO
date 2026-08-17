@@ -3,12 +3,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.core.account_lockout import get_account_locker
 from app.core.security import hash_password, hash_token
+from app.models.audit_log import AuditLog
+from app.models.blacklist import Blacklist
 from app.models.contact import Contact
+from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
 from app.models.verify import Verify, VerifyType
 from app.schemas.common import PaginatedResponse
@@ -80,59 +83,6 @@ def _verify_password_reset_scope(current_user: User, target: User) -> None:
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
-def _verify_user_delete_scope(current_user: User, target: User) -> None:
-    if target.id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account",
-        )
-    if current_user.role == UserRole.SUPERADMIN:
-        return
-    if current_user.role == UserRole.ADMIN:
-        if target.role != UserRole.USER or target.village_id != current_user.village_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to delete this user",
-            )
-        return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
-
-
-async def delete_user(
-    db: AsyncSession,
-    request: Request,
-    current_user: User,
-    user_id: uuid.UUID,
-) -> str:
-    target = await _get_user_or_404(db, user_id)
-    _verify_user_delete_scope(current_user, target)
-
-    if target.role == UserRole.SUPERADMIN:
-        count_result = await db.execute(
-            select(func.count()).select_from(User).where(User.role == UserRole.SUPERADMIN)
-        )
-        if count_result.scalar_one() <= 1:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete the last remaining superadmin",
-            )
-
-    username = target.username
-    village_id = target.village_id
-
-    await audit_service.log_action(
-        db,
-        request,
-        action="user_deleted",
-        detail=f"deleted user: {username} (role={target.role.value})",
-        user_id=current_user.id,
-        village_id=village_id,
-    )
-
-    await db.execute(delete(User).where(User.id == user_id))
-    await db.commit()
-    return username
-
 
 def _build_user_list_filters(
     current_user: User,
@@ -148,6 +98,8 @@ def _build_user_list_filters(
             filters.append(User.village_id == village_id_filter)
     else:
         filters.append(User.village_id == current_user.village_id)
+        if village_id_filter is not None:
+            filters.append(User.village_id == village_id_filter)
 
     if role_filter is not None:
         filters.append(User.role == role_filter)
@@ -459,3 +411,72 @@ async def unlock_user_account(
 
     await db.commit()
     return target.username
+
+async def _verify_hard_delete_eligible(db: AsyncSession, target: User) -> None:
+    if target.hashpassword is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="บัญชีนี้เคยตั้งรหัสผ่านและใช้งานแล้ว ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    contact_count = await db.execute(
+        select(func.count()).select_from(Contact).where(Contact.user_id == target.id)
+    )
+    if contact_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="บัญชีนี้มีข้อมูลช่องทางติดต่อผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    refresh_token_count = await db.execute(
+        select(func.count()).select_from(RefreshToken).where(RefreshToken.user_id == target.id)
+    )
+    if refresh_token_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="บัญชีนี้มีเซสชันการเข้าสู่ระบบผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    blacklist_count = await db.execute(
+        select(func.count()).select_from(Blacklist).where(Blacklist.added_by == target.id)
+    )
+    if blacklist_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="บัญชีนี้มีรายการ blacklist ที่เคยเพิ่มไว้ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+
+async def delete_user(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+) -> None:
+    target = await _get_user_or_404(db, user_id)
+
+    if target.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ไม่สามารถลบบัญชีตัวเองได้",
+        )
+
+    _verify_user_write_scope(current_user, target)
+    await _verify_hard_delete_eligible(db, target)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_deleted",
+        detail=f"permanently deleted unused user: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.execute(
+        update(AuditLog).where(AuditLog.user_id == target.id).values(user_id=None)
+    )
+    await db.execute(delete(Verify).where(Verify.user_id == target.id))
+
+    await db.delete(target)
+    await db.commit()

@@ -82,6 +82,8 @@ async def list_blacklist_entries(
             stmt = stmt.where(Blacklist.village_id == village_id)
     else:
         stmt = stmt.where(Blacklist.village_id == current_user.village_id)
+        if village_id is not None:
+            stmt = stmt.where(Blacklist.village_id == village_id)
 
     if license_plate is not None:
         stmt = stmt.where(Blacklist.license_plate.ilike(f"%{license_plate}%"))

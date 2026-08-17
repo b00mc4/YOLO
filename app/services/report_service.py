@@ -40,7 +40,10 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
         if village_id_filter is not None:
             return [Camera.village_id == village_id_filter]
         return []
-    return [Camera.village_id == current_user.village_id]
+    filters = [Camera.village_id == current_user.village_id]
+    if village_id_filter is not None:
+        filters.append(Camera.village_id == village_id_filter)
+    return filters
 
 
 async def _count_total(db: AsyncSession, base_filters: list) -> int:

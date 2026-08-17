@@ -126,5 +126,5 @@ async def delete_user(
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    username = await user_service.delete_user(db, request, current_user, user_id)
-    return MessageResponse(detail=f"ลบผู้ใช้ {username} สำเร็จ")
+    await user_service.delete_user(db, request, current_user, user_id)
+    return MessageResponse(detail="ลบบัญชีผู้ใช้ถาวรสำเร็จ")

@@ -327,6 +327,8 @@ async def list_detections(
             stmt = stmt.where(Camera.village_id == village_id)
     else:
         stmt = stmt.where(Camera.village_id == current_user.village_id)
+        if village_id is not None:
+            stmt = stmt.where(Camera.village_id == village_id)
 
     if camera_id is not None:
         stmt = stmt.where(Car.camera_id == camera_id)
