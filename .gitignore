@@ -35,6 +35,7 @@ alembic/versions/__pycache__/
 
 mediamtx.exe
 mediamtx.yml
+mediamtx.log
 auto.crt
 auto.key
 

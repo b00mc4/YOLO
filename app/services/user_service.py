@@ -425,15 +425,6 @@ async def _verify_hard_delete_eligible(db: AsyncSession, target: User) -> None:
             detail="บัญชีนี้เคยตั้งรหัสผ่านและใช้งานแล้ว ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
         )
 
-    contact_count = await db.execute(
-        select(func.count()).select_from(Contact).where(Contact.user_id == target.id)
-    )
-    if contact_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="บัญชีนี้มีข้อมูลช่องทางติดต่อผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
     refresh_token_count = await db.execute(
         select(func.count()).select_from(RefreshToken).where(RefreshToken.user_id == target.id)
     )
@@ -483,6 +474,6 @@ async def delete_user(
         update(AuditLog).where(AuditLog.user_id == target.id).values(user_id=None)
     )
     await db.execute(delete(Verify).where(Verify.user_id == target.id))
-
+    await db.execute(delete(Contact).where(Contact.user_id == target.id))
     await db.delete(target)
     await db.commit()
