@@ -10,6 +10,7 @@ from app.core.account_lockout import get_account_locker
 from app.core.security import hash_password, hash_token
 from app.models.audit_log import AuditLog
 from app.models.blacklist import Blacklist
+from app.models.whitelist import Whitelist
 from app.models.contact import Contact
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
@@ -441,6 +442,15 @@ async def _verify_hard_delete_eligible(db: AsyncSession, target: User) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="บัญชีนี้มีรายการ blacklist ที่เคยเพิ่มไว้ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    whitelist_count = await db.execute(
+        select(func.count()).select_from(Whitelist).where(Whitelist.added_by == target.id)
+    )
+    if whitelist_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="บัญชีนี้มีรายการ whitelist ที่เคยเพิ่มไว้ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
         )
 
 

@@ -20,6 +20,7 @@ class Car(Base):
     image_full = Column(String(255), nullable=False)
     time_detect = Column(DateTime(timezone=True), nullable=False, index=True)
     is_blacklist = Column(Boolean, nullable=False, server_default=false())
+    is_whitelist = Column(Boolean, nullable=False, server_default=false())
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     camera = relationship("Camera", back_populates="detections")

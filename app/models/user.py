@@ -40,4 +40,5 @@ class User(Base):
     contacts = relationship("Contact", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
     blacklist_entries_added = relationship("Blacklist", back_populates="added_by_user")
+    whitelist_entries_added = relationship("Whitelist", back_populates="added_by_user")
     audit_logs = relationship("AuditLog", back_populates="user")

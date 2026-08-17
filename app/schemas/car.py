@@ -65,6 +65,7 @@ class CarRead(BaseModel):
     image_full: str
     time_detect: datetime
     is_blacklist: bool
+    is_whitelist: bool
     created_at: datetime
 
 
@@ -85,6 +86,7 @@ class CarDetailRead(BaseModel):
     image_full: str
     time_detect: datetime
     is_blacklist: bool
+    is_whitelist: bool
     created_at: datetime
     camera: CameraSummary
 
@@ -117,6 +119,7 @@ class DetectionEventPayload(BaseModel):
     color: str
     time_detect: datetime
     is_blacklist: bool
+    is_whitelist: bool
     camera: DetectionEventCamera
     image_crop: str
     image_full: str

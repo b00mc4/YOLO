@@ -18,4 +18,5 @@ class Group(Base):
     users = relationship("User", back_populates="village")
     cameras = relationship("Camera", back_populates="village")
     blacklist_entries = relationship("Blacklist", back_populates="village")
+    whitelist_entries = relationship("Whitelist", back_populates="village")
     audit_logs = relationship("AuditLog", back_populates="village")

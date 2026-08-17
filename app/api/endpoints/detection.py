@@ -129,6 +129,7 @@ async def list_detections(
     time_detect_from: datetime | None = Query(default=None),
     time_detect_to: datetime | None = Query(default=None),
     is_blacklist: bool | None = Query(default=None),
+    is_whitelist: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -145,6 +146,7 @@ async def list_detections(
         time_detect_from=time_detect_from,
         time_detect_to=time_detect_to,
         is_blacklist=is_blacklist,
+        is_whitelist=is_whitelist,
         page=page,
         page_size=page_size,
     )

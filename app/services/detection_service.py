@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
+from app.models.whitelist import Whitelist
 from app.models.camera import Camera
 from app.models.car import Car
 from app.models.group import Group
@@ -51,6 +52,7 @@ def _to_car_read(car: Car, request: Request) -> CarRead:
         ),
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
+        is_whitelist=car.is_whitelist,
         created_at=car.created_at,
     )
 
@@ -70,6 +72,7 @@ def _to_car_detail_read(car: Car, camera: Camera, village: Group, request: Reque
         ),
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
+        is_whitelist=car.is_whitelist,
         created_at=car.created_at,
         camera=CameraSummary(
             id=camera.id,
@@ -127,6 +130,24 @@ async def _check_is_blacklisted(
     )
     return result.scalar_one_or_none() is not None
 
+
+async def _check_is_whitelisted(
+    db: AsyncSession,
+    village_id: uuid.UUID,
+    license_plate: str,
+    province: str,
+) -> bool:
+    result = await db.execute(
+        select(Whitelist.id)
+        .where(
+            Whitelist.village_id == village_id,
+            Whitelist.license_plate == license_plate,
+            Whitelist.province == province,
+        )
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
+
 async def _cleanup_written_images(written_paths: list[str]) -> None:
     for relative_path in written_paths:
         await storage_service.delete_detection_image(relative_path)
@@ -140,6 +161,7 @@ def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -
         color=car.color,
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
+        is_whitelist=car.is_whitelist,
         camera=DetectionEventCamera(
             id=camera.id,
             name=camera.name,
@@ -165,6 +187,7 @@ def _build_global_detection_event_payload(
         color=car.color,
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
+        is_whitelist=car.is_whitelist,
         camera=DetectionEventCameraGlobal(
             id=camera.id,
             name=camera.name,
@@ -230,6 +253,9 @@ async def create_detection(
     is_blacklist = await _check_is_blacklisted(
         db, camera.village_id, payload.license_plate, payload.province
     )
+    is_whitelist = await _check_is_whitelisted(
+        db, camera.village_id, payload.license_plate, payload.province
+    )
 
     written_paths: list[str] = []
     try:
@@ -255,6 +281,7 @@ async def create_detection(
         image_full=full_path,
         time_detect=payload.capture_time,
         is_blacklist=is_blacklist,
+        is_whitelist=is_whitelist,
     )
     db.add(car)
 
@@ -317,6 +344,7 @@ async def list_detections(
     time_detect_from: datetime | None,
     time_detect_to: datetime | None,
     is_blacklist: bool | None,
+    is_whitelist: bool | None,
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
@@ -335,6 +363,8 @@ async def list_detections(
         stmt = stmt.where(Car.time_detect <= time_detect_to)
     if is_blacklist is not None:
         stmt = stmt.where(Car.is_blacklist == is_blacklist)
+    if is_whitelist is not None:
+        stmt = stmt.where(Car.is_whitelist == is_whitelist)
 
     count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
     total = count_result.scalar_one()
