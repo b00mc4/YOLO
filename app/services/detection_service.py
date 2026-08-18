@@ -321,6 +321,8 @@ async def create_detection(
         await sse_service.publish(camera.village_id, "detection_created", event_data)
         if is_blacklist:
             await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
+        if is_whitelist:
+            await sse_service.publish(camera.village_id, "whitelist_alert", event_data)
 
         global_payload = _build_global_detection_event_payload(request, camera, car)
         await sse_service.publish_global("detection_created", global_payload.model_dump(mode="json"))
