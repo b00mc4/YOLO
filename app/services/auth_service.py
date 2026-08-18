@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.api.deps import get_client_ip
 from app.core.config import get_settings
 from app.core.security import (
     _DUMMY_PASSWORD_HASH as hash_security_dummy,
@@ -16,7 +17,7 @@ from app.core.security import (
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.verify import Verify, VerifyType
-from app.services import audit_service, email_service
+from app.services import audit_service, email_service, login_security_service
 from app.models.group import Group
 from app.models.user import User, UserRole
 from app.core.rate_limit import get_rate_limiter
@@ -81,8 +82,10 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     )
 
     if login_failed:
+        locked_for_seconds = None
         if credential_failed:
-            get_account_locker().register_failure(locker_key)
+            locked_for_seconds = get_account_locker().register_failure(locker_key)
+
         await audit_service.log_action(
             db,
             request,
@@ -95,7 +98,19 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
             user_id=user.id if user is not None else None,
             village_id=user.village_id if user is not None else None,
         )
+
+        if locked_for_seconds is not None:
+            await login_security_service.record_bruteforce_audit(
+                db, request, username, user, locked_for_seconds
+            )
+
         await db.commit()
+
+        if locked_for_seconds is not None:
+            await login_security_service.publish_bruteforce_alert(
+                username, user, locked_for_seconds, get_client_ip(request)
+            )
+
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
 
     get_account_locker().reset(locker_key)

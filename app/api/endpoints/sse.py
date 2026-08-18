@@ -9,11 +9,12 @@ from app.core.presence_limit import PresenceConnectionLimitExceeded
 from app.models.user import User, UserRole
 from app.schemas.presence import PresenceTicketResponse
 from app.schemas.sse import SSETicketResponse
-from app.services import presence_service, sse_service
+from app.services import presence_service, security_alert_service, sse_service
 
 router = APIRouter(prefix="/sse", tags=["sse"])
 
 _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.USER, UserRole.SUPERADMIN)
+_SECURITY_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
 _PING_INTERVAL_SECONDS = 15
 
 
@@ -42,6 +43,39 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
                     yield {"event": "ping", "data": ""}
         finally:
             sse_service.unsubscribe(village_id, queue)
+
+    return EventSourceResponse(event_generator())
+
+
+@router.post(
+    "/security-alerts/ticket",
+    response_model=SSETicketResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_security_alert_ticket(
+    current_user: User = Depends(require_roles(*_SECURITY_ALLOWED_ROLES)),
+):
+    ticket = security_alert_service.issue_ticket(current_user)
+    return SSETicketResponse(ticket=ticket)
+
+
+@router.get("/security-alerts")
+async def stream_security_alerts(request: Request, ticket: str = Query(...)):
+    village_id = security_alert_service.resolve_ticket(ticket)
+    queue = security_alert_service.subscribe(village_id)
+
+    async def event_generator():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
+                    yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
+                except asyncio.TimeoutError:
+                    yield {"event": "ping", "data": ""}
+        finally:
+            security_alert_service.unsubscribe(village_id, queue)
 
     return EventSourceResponse(event_generator())
 
