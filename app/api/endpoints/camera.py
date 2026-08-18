@@ -18,7 +18,8 @@ from app.services import camera_service
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
-_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
+_WRITE_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
+_READ_ROLES = (UserRole.USER, UserRole.ADMIN, UserRole.SUPERADMIN)
 
 
 @router.post("", response_model=CameraRead, status_code=status.HTTP_201_CREATED)
@@ -26,7 +27,7 @@ async def create_camera(
     payload: CameraCreate,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.create_camera(db, request, background_tasks, current_user, payload)
@@ -38,7 +39,7 @@ async def list_cameras(
     is_active: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_READ_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.list_cameras(db, current_user, village_id, is_active, page, page_size)
@@ -47,7 +48,7 @@ async def list_cameras(
 async def resync_all_cameras(
     request: Request,
     village_id: uuid.UUID | None = Query(default=None),
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.resync_all_cameras(db, request, current_user, village_id)
@@ -56,7 +57,7 @@ async def resync_all_cameras(
 @router.get("/{camera_id}", response_model=CameraRead)
 async def get_camera(
     camera_id: uuid.UUID,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_READ_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.get_camera_detail(db, current_user, camera_id)
@@ -65,7 +66,7 @@ async def get_camera(
 @router.get("/{camera_id}/status", response_model=CameraStatusRead)
 async def get_camera_status(
     camera_id: uuid.UUID,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_READ_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.get_camera_status(db, current_user, camera_id)
@@ -77,7 +78,7 @@ async def update_camera(
     payload: CameraUpdate,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.update_camera(db, request, background_tasks, current_user, camera_id, payload)
@@ -87,7 +88,7 @@ async def update_camera(
 async def resync_camera_ai_vision(
     camera_id: uuid.UUID,
     request: Request,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.resync_camera_ai_vision(db, request, current_user, camera_id)
@@ -97,7 +98,7 @@ async def resync_camera_ai_vision(
 async def check_camera_verification(
     camera_id: uuid.UUID,
     request: Request,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     return await camera_service.check_camera_verification_now(db, request, current_user, camera_id)
@@ -108,7 +109,7 @@ async def delete_camera(
     camera_id: uuid.UUID,
     request: Request,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
     await camera_service.delete_camera(db, request, background_tasks, current_user, camera_id)

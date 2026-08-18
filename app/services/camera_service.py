@@ -274,15 +274,18 @@ async def list_cameras(
     stmt = select(Camera)
     count_stmt = select(func.count()).select_from(Camera)
 
-    if current_user.role == UserRole.ADMIN:
-        stmt = stmt.where(Camera.village_id == current_user.village_id)
-        count_stmt = count_stmt.where(Camera.village_id == current_user.village_id)
+    if current_user.role == UserRole.SUPERADMIN:
         if village_id_filter is not None:
             stmt = stmt.where(Camera.village_id == village_id_filter)
             count_stmt = count_stmt.where(Camera.village_id == village_id_filter)
-    elif village_id_filter is not None:
-        stmt = stmt.where(Camera.village_id == village_id_filter)
-        count_stmt = count_stmt.where(Camera.village_id == village_id_filter)
+    else:
+        if village_id_filter is not None and village_id_filter != current_user.village_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to specify village_id for this role",
+            )
+        stmt = stmt.where(Camera.village_id == current_user.village_id)
+        count_stmt = count_stmt.where(Camera.village_id == current_user.village_id)
 
     if is_active_filter is not None:
         stmt = stmt.where(Camera.is_active == is_active_filter)
