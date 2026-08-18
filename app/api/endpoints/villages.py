@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
 from app.models.user import User, UserRole
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.village import VillageCreate, VillageDetailRead, VillageRead, VillageUpdate
 from app.services import village_service
 
@@ -53,3 +53,14 @@ async def update_village(
     db: AsyncSession = Depends(get_db),
 ):
     return await village_service.update_village(db, request, background_tasks, current_user, village_id, payload)
+
+
+@router.delete("/{village_id}", response_model=MessageResponse)
+async def delete_village(
+    village_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    await village_service.delete_village(db, request, current_user, village_id)
+    return MessageResponse(detail="ลบหมู่บ้านถาวรสำเร็จ")

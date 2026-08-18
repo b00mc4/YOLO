@@ -29,6 +29,14 @@ def _bangkok_day_range_bounds(days: int) -> tuple[date, date, datetime, datetime
 
     return date_from, date_to, start_utc, end_utc
 
+async def _count_whitelist(db: AsyncSession, base_filters: list) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters, Car.is_whitelist.is_(True))
+    )
+    return result.scalar_one()
 
 def _bangkok_single_day_bounds(target_date: date) -> tuple[datetime, datetime]:
     start_utc = _bangkok_midnight(target_date).astimezone(timezone.utc)
@@ -124,6 +132,7 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
         "total_detections": await _count_total(db, base_filters),
         "unique_plates": await _count_unique_plates(db, base_filters),
         "blacklist_detections": await _count_blacklist(db, base_filters),
+        "whitelist_detections": await _count_whitelist(db, base_filters),
         "top_repeated_plates": await _top_repeated_plates(db, base_filters),
         "hourly_buckets": hourly_buckets,
         "peak_time": _compute_peak_time(hourly_buckets),

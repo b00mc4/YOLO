@@ -1,11 +1,14 @@
 from __future__ import annotations
 import uuid
 from fastapi import BackgroundTasks, HTTPException, Request, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.audit_log import AuditLog
+from app.models.blacklist import Blacklist
 from app.models.camera import Camera
 from app.models.group import Group
 from app.models.user import User, UserRole
+from app.models.whitelist import Whitelist
 from app.schemas.camera import CameraBasicRead
 from app.schemas.common import PaginatedResponse
 from app.schemas.village import VillageCreate, VillageDetailRead, VillageMemberSummary, VillageUpdate
@@ -157,3 +160,68 @@ async def update_village(
             background_tasks.add_task(camera_service.deactivate_village_cameras, village.id)
 
     return village
+
+
+async def _verify_village_hard_delete_eligible(db: AsyncSession, village: Group) -> None:
+    camera_count = await db.execute(
+        select(func.count()).select_from(Camera).where(Camera.village_id == village.id)
+    )
+    if camera_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="หมู่บ้านนี้มีกล้องผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    user_count = await db.execute(
+        select(func.count()).select_from(User).where(User.village_id == village.id)
+    )
+    if user_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="หมู่บ้านนี้มีผู้ใช้งานผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    blacklist_count = await db.execute(
+        select(func.count()).select_from(Blacklist).where(Blacklist.village_id == village.id)
+    )
+    if blacklist_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="หมู่บ้านนี้มีรายการ blacklist ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+    whitelist_count = await db.execute(
+        select(func.count()).select_from(Whitelist).where(Whitelist.village_id == village.id)
+    )
+    if whitelist_count.scalar_one() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="หมู่บ้านนี้มีรายการ whitelist ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
+        )
+
+
+async def delete_village(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    village_id: uuid.UUID,
+) -> None:
+    village = await get_village(db, village_id)
+    await _verify_village_hard_delete_eligible(db, village)
+
+    village_name = village.name
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="village_deleted",
+        detail=f"permanently deleted unused village: {village_name}",
+        user_id=current_user.id,
+        village_id=None,
+    )
+
+    await db.execute(
+        update(AuditLog).where(AuditLog.village_id == village.id).values(village_id=None)
+    )
+    await db.delete(village)
+    await db.commit()
