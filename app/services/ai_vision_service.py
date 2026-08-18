@@ -84,6 +84,8 @@ async def notify_camera_deleted(camera_id: uuid.UUID) -> bool:
         logger.warning("ai vision notify_camera_deleted request failed for %s: %s", camera_id, exc)
         return False
 
+    if response.status_code == 404:
+        return True
     if response.status_code >= 400:
         logger.warning(
             "ai vision notify_camera_deleted rejected for %s: status=%s body=%s",

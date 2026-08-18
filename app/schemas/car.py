@@ -101,6 +101,7 @@ class DetectionDashboardRead(BaseModel):
     total_detections_today: int
     unique_plates_today: int
     blacklist_detections_today: int
+    whitelist_detections_today: int
     top_repeated_plates: list[RepeatedPlateEntry]
     latest_detections: list[CarRead]
 

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck
+from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck, DetectionDashboardRead
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 import logging
@@ -82,7 +82,7 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
         )
     except ValidationError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=_format_validation_error(exc),
         )
 
@@ -160,6 +160,16 @@ async def get_camera_live(
     db: AsyncSession = Depends(get_db),
 ):
     return await detection_service.get_camera_live_view(db, request, current_user, camera_id, limit)
+
+@router.get("/dashboard/today", response_model=DetectionDashboardRead)
+async def get_today_dashboard(
+    request: Request,
+    village_id: uuid.UUID | None = Query(default=None),
+    latest_limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await detection_service.get_today_dashboard(db, request, current_user, village_id, latest_limit)
 
 @router.get("/{detection_id}", response_model=CarDetailRead)
 async def get_detection_detail(

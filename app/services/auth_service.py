@@ -138,7 +138,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     result = await db.execute(select(User).where(User.id == stored_token.user_id))
     user = result.scalar_one_or_none()
 
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or not user.is_verify:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
     village_is_active = True

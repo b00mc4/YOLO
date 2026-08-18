@@ -503,6 +503,14 @@ async def get_today_dashboard(
     )
     blacklist_detections_today = blacklist_result.scalar_one()
 
+    whitelist_result = await db.execute(
+    select(func.count())
+    .select_from(Car)
+    .join(Camera, Car.camera_id == Camera.id)
+    .where(*base_filters, Car.is_whitelist.is_(True))
+)
+    whitelist_detections_today = whitelist_result.scalar_one()
+
     top_repeated_result = await db.execute(
         select(Car.license_plate, Car.province, func.count())
         .join(Camera, Car.camera_id == Camera.id)
@@ -531,6 +539,7 @@ async def get_today_dashboard(
         total_detections_today=total_detections_today,
         unique_plates_today=unique_plates_today,
         blacklist_detections_today=blacklist_detections_today,
+        whitelist_detections_today=whitelist_detections_today,
         top_repeated_plates=top_repeated_plates,
         latest_detections=latest_detections,
     )
