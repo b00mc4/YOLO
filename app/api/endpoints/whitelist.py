@@ -1,13 +1,11 @@
 from __future__ import annotations
-
 import uuid
-
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.models.whitelist import WhitelistCategory
 from app.schemas.whitelist import WhitelistCreate, WhitelistRead, WhitelistUpdate
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.services import whitelist_service
@@ -28,6 +26,8 @@ async def create_whitelist_entry(
 @router.get("", response_model=PaginatedResponse[WhitelistRead])
 async def list_whitelist_entries(
     village_id: uuid.UUID | None = Query(default=None),
+    category: WhitelistCategory | None = Query(default=None),
+    name: str | None = Query(default=None),
     license_plate: str | None = Query(default=None),
     province: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -36,7 +36,7 @@ async def list_whitelist_entries(
     db: AsyncSession = Depends(get_db),
 ):
     return await whitelist_service.list_whitelist_entries(
-        db, current_user, village_id, license_plate, province, page, page_size
+        db, current_user, village_id, category, name, license_plate, province, page, page_size
     )
 
 

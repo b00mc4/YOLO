@@ -11,7 +11,9 @@ class AuditLogRead(BaseModel):
 
     id: uuid.UUID
     village_id: uuid.UUID | None
+    village_name: str | None
     user_id: uuid.UUID | None
+    username: str | None
     action: str
     detail: str
     ip_address: str

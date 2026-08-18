@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
-from app.models.whitelist import Whitelist
+from app.models.whitelist import Whitelist, WhitelistCategory
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.whitelist import WhitelistCreate, WhitelistRead, WhitelistUpdate
@@ -85,6 +85,8 @@ async def create_whitelist_entry(
 
     entry = Whitelist(
         village_id=village_id,
+        category=payload.category,
+        name=payload.name,
         license_plate=payload.license_plate,
         province=payload.province,
         note=payload.note,
@@ -96,7 +98,10 @@ async def create_whitelist_entry(
         db,
         request,
         action="whitelist_create",
-        detail=f"added whitelist entry: {payload.license_plate} ({payload.province})",
+        detail=(
+            f"added whitelist entry ({payload.category.value}): "
+            f"{payload.name} - {payload.license_plate} ({payload.province})"
+        ),
         user_id=current_user.id,
         village_id=village_id,
     )
@@ -110,6 +115,8 @@ async def list_whitelist_entries(
     db: AsyncSession,
     current_user: User,
     village_id: uuid.UUID | None,
+    category: WhitelistCategory | None,
+    name: str | None,
     license_plate: str | None,
     province: str | None,
     page: int,
@@ -118,6 +125,10 @@ async def list_whitelist_entries(
     scope_filters = _build_whitelist_list_scope_filters(current_user, village_id)
     stmt = select(Whitelist).where(*scope_filters)
 
+    if category is not None:
+        stmt = stmt.where(Whitelist.category == category)
+    if name is not None:
+        stmt = stmt.where(Whitelist.name.ilike(f"%{name}%"))
     if license_plate is not None:
         stmt = stmt.where(Whitelist.license_plate.ilike(f"%{license_plate}%"))
     if province is not None:
@@ -162,7 +173,10 @@ async def update_whitelist_entry(
         db,
         request,
         action="whitelist_update",
-        detail=f"updated whitelist entry: {entry.license_plate} ({entry.province})",
+        detail=(
+            f"updated whitelist entry ({entry.category.value}): "
+            f"{entry.name} - {entry.license_plate} ({entry.province})"
+        ),
         user_id=current_user.id,
         village_id=entry.village_id,
     )
@@ -185,7 +199,10 @@ async def delete_whitelist_entry(
         db,
         request,
         action="whitelist_delete",
-        detail=f"removed whitelist entry: {entry.license_plate} ({entry.province})",
+        detail=(
+            f"removed whitelist entry ({entry.category.value}): "
+            f"{entry.name} - {entry.license_plate} ({entry.province})"
+        ),
         user_id=current_user.id,
         village_id=entry.village_id,
     )
