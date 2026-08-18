@@ -1,71 +1,100 @@
 from __future__ import annotations
-from collections import OrderedDict
+import asyncio
+import uuid
+from collections import OrderedDict, defaultdict
+from datetime import datetime, timedelta, timezone
 from time import monotonic
+from fastapi import HTTPException, status
+from app.core.config import get_settings
+from app.core.security import generate_secure_token, hash_token
+from app.models.user import User, UserRole
+
+settings = get_settings()
+
+_subscribers: dict[uuid.UUID, set[asyncio.Queue]] = defaultdict(set)
+_global_subscribers: set[asyncio.Queue] = set()
+_tickets: OrderedDict[str, tuple[uuid.UUID | None, datetime]] = OrderedDict()
+
+_SWEEP_INTERVAL_SECONDS = 60.0
+_MAX_TRACKED_TICKETS = 10_000
+_last_sweep_at = monotonic()
 
 
-class AccountLocked(Exception):
-    def __init__(self, retry_after_seconds: float):
-        self.retry_after_seconds = retry_after_seconds
-        super().__init__("Account locked")
+def _sweep_expired_tickets() -> None:
+    global _last_sweep_at
+
+    now_monotonic = monotonic()
+    if now_monotonic - _last_sweep_at < _SWEEP_INTERVAL_SECONDS:
+        return
+    _last_sweep_at = now_monotonic
+
+    now_utc = datetime.now(timezone.utc)
+    expired_keys = [
+        token_hash
+        for token_hash, (_, expire_at) in _tickets.items()
+        if expire_at < now_utc
+    ]
+    for token_hash in expired_keys:
+        _tickets.pop(token_hash, None)
 
 
-class _LockState:
-    __slots__ = ("fail_count", "locked_until", "current_lockout_seconds")
+def issue_ticket(current_user: User) -> str:
+    _sweep_expired_tickets()
 
-    def __init__(self) -> None:
-        self.fail_count = 0
-        self.locked_until = 0.0
-        self.current_lockout_seconds = 0.0
+    if len(_tickets) >= _MAX_TRACKED_TICKETS:
+        _tickets.popitem(last=False)
 
-
-class InMemorySingleWorkerAccountLocker:
-    _FIRST_LOCKOUT_THRESHOLD = 5
-    _LOCKOUT_STEP_SECONDS = 5.0
-    _MAX_TRACKED_ACCOUNTS = 10_000
-
-    def __init__(self) -> None:
-        self._state: OrderedDict[str, _LockState] = OrderedDict()
-
-    def check_locked(self, key: str) -> None:
-        entry = self._state.get(key)
-        if entry is None:
-            return
-
-        self._state.move_to_end(key)
-
-        now = monotonic()
-        if entry.locked_until > now:
-            raise AccountLocked(retry_after_seconds=entry.locked_until - now)
-
-    def register_failure(self, key: str) -> float | None:
-        entry = self._state.get(key)
-
-        if entry is None:
-            if len(self._state) >= self._MAX_TRACKED_ACCOUNTS:
-                self._state.popitem(last=False)
-            entry = _LockState()
-            self._state[key] = entry
-        else:
-            self._state.move_to_end(key)
-
-        has_locked_before = entry.current_lockout_seconds > 0
-        threshold = 1 if has_locked_before else self._FIRST_LOCKOUT_THRESHOLD
-
-        entry.fail_count += 1
-        if entry.fail_count >= threshold:
-            entry.current_lockout_seconds += self._LOCKOUT_STEP_SECONDS
-            entry.locked_until = monotonic() + entry.current_lockout_seconds
-            entry.fail_count = 0
-            return entry.current_lockout_seconds
-
-        return None
-
-    def reset(self, key: str) -> None:
-        self._state.pop(key, None)
+    raw_token = generate_secure_token()
+    expire_at = datetime.now(timezone.utc) + timedelta(seconds=settings.sse_ticket_expire_seconds)
+    scope_village_id = None if current_user.role == UserRole.SUPERADMIN else current_user.village_id
+    _tickets[hash_token(raw_token)] = (scope_village_id, expire_at)
+    return raw_token
 
 
-_account_locker = InMemorySingleWorkerAccountLocker()
+def resolve_ticket(raw_token: str) -> uuid.UUID | None:
+    ticket = _tickets.pop(hash_token(raw_token), None)
+    if ticket is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+
+    village_id, expire_at = ticket
+    if expire_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+
+    return village_id
 
 
-def get_account_locker() -> InMemorySingleWorkerAccountLocker:
-    return _account_locker
+def subscribe(village_id: uuid.UUID | None) -> asyncio.Queue:
+    queue: asyncio.Queue = asyncio.Queue()
+    if village_id is None:
+        _global_subscribers.add(queue)
+    else:
+        _subscribers[village_id].add(queue)
+    return queue
+
+
+def unsubscribe(village_id: uuid.UUID | None, queue: asyncio.Queue) -> None:
+    if village_id is None:
+        _global_subscribers.discard(queue)
+        return
+
+    subscribers = _subscribers.get(village_id)
+    if subscribers is None:
+        return
+    subscribers.discard(queue)
+    if not subscribers:
+        _subscribers.pop(village_id, None)
+
+
+async def publish(village_id: uuid.UUID, event: str, data: dict) -> None:
+    subscribers = _subscribers.get(village_id)
+    if not subscribers:
+        return
+    for queue in list(subscribers):
+        await queue.put({"event": event, "data": data})
+
+
+async def publish_global(event: str, data: dict) -> None:
+    if not _global_subscribers:
+        return
+    for queue in list(_global_subscribers):
+        await queue.put({"event": event, "data": data})
