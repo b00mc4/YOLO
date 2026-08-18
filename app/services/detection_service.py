@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
 from app.models.whitelist import Whitelist
-from app.models.camera import Camera
+from app.models.camera import Camera, CameraVerificationStatus
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
@@ -30,7 +30,14 @@ from app.schemas.car import (
     DetectionCreateAck
 )
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service, camera_service, mediamtx_service, sse_service, storage_service
+from app.services import (
+    audit_service,
+    camera_service,
+    camera_verification_service,
+    mediamtx_service,
+    sse_service,
+    storage_service,
+)
 import logging
 from app.core.timezone import BANGKOK_TZ
 
@@ -230,6 +237,17 @@ async def create_detection(
 
     camera = await _get_camera_or_404(db, payload.camera_id)
 
+    if camera.verification_status == CameraVerificationStatus.PENDING:
+        try:
+            await camera_verification_service.verify_from_detection(camera.id, request)
+        except Exception:
+            logger.exception(
+                "Failed to finalize implicit camera verification for camera_id=%s", camera.id
+            )
+        else:
+            camera.verification_status = CameraVerificationStatus.VERIFIED
+            camera.ai_vision_synced_at = datetime.now(timezone.utc)
+
     car_id = uuid.uuid4()
 
     crop_content, crop_extension = await storage_service.read_and_validate_image(image_crop)
@@ -343,6 +361,7 @@ async def list_detections(
     camera_id: uuid.UUID | None,
     license_plate: str | None,
     province: str | None,
+    color: str | None,
     time_detect_from: datetime | None,
     time_detect_to: datetime | None,
     is_blacklist: bool | None,
@@ -359,6 +378,8 @@ async def list_detections(
         stmt = stmt.where(Car.license_plate.ilike(f"%{license_plate}%"))
     if province is not None:
         stmt = stmt.where(Car.province == province)
+    if color is not None:
+        stmt = stmt.where(Car.color.ilike(f"%{color}%"))
     if time_detect_from is not None:
         stmt = stmt.where(Car.time_detect >= time_detect_from)
     if time_detect_to is not None:

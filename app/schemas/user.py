@@ -123,3 +123,12 @@ class UserRegister(BaseModel):
     village_id: uuid.UUID | None
     created_at: datetime
     invite_email_sent: bool = True
+
+class LockedAccountEntry(BaseModel):
+    user_id: uuid.UUID
+    username: str
+    fullname: str
+    role: UserRole
+    village_id: uuid.UUID | None
+    village_name: str | None
+    unlocked_at: datetime

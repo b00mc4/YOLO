@@ -19,6 +19,7 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.contact import ContactRead
 from app.schemas.user import (
     AdminResetPasswordRequest,
+    LockedAccountEntry,
     UserCreate,
     UserDetail,
     UserMeDetail,
@@ -28,6 +29,7 @@ from app.schemas.user import (
 )
 from app.services import audit_service, auth_service, email_service, village_service
 import logging
+from app.models.group import Group
 
 
 logger = logging.getLogger(__name__)
@@ -487,3 +489,43 @@ async def delete_user(
     await db.execute(delete(Contact).where(Contact.user_id == target.id))
     await db.delete(target)
     await db.commit()
+
+async def list_locked_accounts(
+    db: AsyncSession,
+    current_user: User,
+) -> list[LockedAccountEntry]:
+    locked = get_account_locker().list_locked()
+    if not locked:
+        return []
+
+    retry_after_by_username = dict(locked)
+
+    stmt = (
+        select(User, Group.name)
+        .outerjoin(Group, User.village_id == Group.id)
+        .where(User.username.in_(retry_after_by_username.keys()))
+    )
+    if current_user.role == UserRole.ADMIN:
+        stmt = stmt.where(
+            User.village_id == current_user.village_id,
+            User.role == UserRole.USER,
+        )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    now = datetime.now(timezone.utc)
+    entries = [
+        LockedAccountEntry(
+            user_id=user.id,
+            username=user.username,
+            fullname=user.fullname,
+            role=user.role,
+            village_id=user.village_id,
+            village_name=village_name,
+            unlocked_at=now + timedelta(seconds=retry_after_by_username[user.username]),
+        )
+        for user, village_name in rows
+    ]
+    entries.sort(key=lambda entry: entry.unlocked_at, reverse=True)
+    return entries

@@ -85,17 +85,24 @@ async def _finalize(
     request: Request | None = None,
     user_id: uuid.UUID | None = None,
 ) -> None:
+    target_status = (
+        CameraVerificationStatus.VERIFIED if verified else CameraVerificationStatus.FAILED
+    )
+
     async with async_session_maker() as db:
         result = await db.execute(select(Camera).where(Camera.id == camera_id))
         camera = result.scalar_one_or_none()
         if camera is None:
             return
 
+        if camera.verification_status == target_status:
+            return
+
         if verified:
             camera.verification_status = CameraVerificationStatus.VERIFIED
             camera.ai_vision_synced_at = datetime.now(timezone.utc)
             action = "camera_verified"
-            detail = f"camera verified: {camera.name}"
+            detail = f"camera verified: {camera.name} ({reason})"
         else:
             camera.verification_status = CameraVerificationStatus.FAILED
             camera.is_active = False
@@ -142,6 +149,16 @@ async def finalize_verification(
     user_id: uuid.UUID | None = None,
 ) -> None:
     await _finalize(camera_id, verified=verified, reason=reason, request=request, user_id=user_id)
+
+
+async def verify_from_detection(camera_id: uuid.UUID, request: Request | None = None) -> None:
+    cancel_verification(camera_id)
+    await finalize_verification(
+        camera_id,
+        verified=True,
+        reason="verified implicitly by an incoming detection from ai vision service",
+        request=request,
+    )
 
 
 async def resume_pending_verifications() -> None:

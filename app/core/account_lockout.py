@@ -60,6 +60,14 @@ class InMemorySingleWorkerAccountLocker:
 
         return None
 
+    def list_locked(self) -> list[tuple[str, float]]:
+        now = monotonic()
+        return [
+            (username, entry.locked_until - now)
+            for username, entry in self._state.items()
+            if entry.locked_until > now
+        ]
+
     def reset(self, key: str) -> None:
         self._state.pop(key, None)
 

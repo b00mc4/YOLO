@@ -9,6 +9,7 @@ from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.user import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
+    LockedAccountEntry,
     UserCreate,
     UserDetail,
     UserMeDetail,
@@ -61,6 +62,13 @@ async def get_my_detail(
     เรียก endpoint อื่นในกลุ่มนี้) เพราะเช็คแค่ตัวตนจาก token ไม่เช็ค role
     """
     return await user_service.get_own_user_detail(db, current_user)
+
+@router.get("/locked-accounts", response_model=list[LockedAccountEntry])
+async def list_locked_accounts(
+    current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await user_service.list_locked_accounts(db, current_user)
 
 
 @router.get("/{user_id}", response_model=UserDetail)
