@@ -34,8 +34,8 @@ from app.services import (
     audit_service,
     camera_service,
     camera_verification_service,
+    channel_service,
     mediamtx_service,
-    sse_service,
     storage_service,
     notification_service
 )
@@ -347,14 +347,14 @@ async def create_detection(
     try:
         event_payload = _build_detection_event_payload(request, camera, car)
         event_data = event_payload.model_dump(mode="json")
-        await sse_service.publish(camera.village_id, "detection_created", event_data)
+        await channel_service.alerts.publish(camera.village_id, "detection_created", event_data)
         if is_blacklist:
-            await sse_service.publish(camera.village_id, "blacklist_alert", event_data)
+            await channel_service.alerts.publish(camera.village_id, "blacklist_alert", event_data)
         if is_whitelist:
-            await sse_service.publish(camera.village_id, "whitelist_alert", event_data)
+            await channel_service.alerts.publish(camera.village_id, "whitelist_alert", event_data)
 
         global_payload = _build_global_detection_event_payload(request, camera, car)
-        await sse_service.publish_global("detection_created", global_payload.model_dump(mode="json"))
+        await channel_service.alerts.publish_global("detection_created", global_payload.model_dump(mode="json"))
     except Exception:
         logger.exception(
             "Failed to publish SSE event for detection_id=%s event_id=%s",

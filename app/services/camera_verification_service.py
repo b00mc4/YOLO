@@ -130,7 +130,7 @@ async def _finalize(
         is_active = camera.is_active
         verification_status = camera.verification_status
 
-    from app.services import sse_service
+    from app.services import channel_service
 
     event = "camera_verified" if verified else "camera_verification_failed"
     payload = {
@@ -139,8 +139,8 @@ async def _finalize(
         "verification_status": verification_status.value,
         "is_active": is_active,
     }
-    await sse_service.publish(village_id, event, payload)
-    await sse_service.publish_global(event, {**payload, "village_id": str(village_id)})
+    await channel_service.alerts.publish(village_id, event, payload)
+    await channel_service.alerts.publish_global(event, {**payload, "village_id": str(village_id)})
 
 
 async def finalize_verification(

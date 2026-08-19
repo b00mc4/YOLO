@@ -4,7 +4,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
 from app.schemas.security_alert import LoginBruteforceAlertPayload, LoginBruteforceAlertPayloadGlobal
-from app.services import audit_service, notification_service, security_alert_service
+from app.services import audit_service, channel_service, notification_service
 from app.db.session import async_session_maker
 
 
@@ -59,7 +59,7 @@ async def publish_bruteforce_alert(
             locked_for_seconds=locked_for_seconds,
             occurred_at=occurred_at,
         )
-        await security_alert_service.publish(
+        await channel_service.security_alerts.publish(
             village_id,
             "login_bruteforce_detected",
             village_payload.model_dump(mode="json"),
@@ -73,7 +73,7 @@ async def publish_bruteforce_alert(
         occurred_at=occurred_at,
         village_id=village_id,
     )
-    await security_alert_service.publish_global(
+    await channel_service.security_alerts.publish_global(
         "login_bruteforce_detected",
         global_payload.model_dump(mode="json"),
     )

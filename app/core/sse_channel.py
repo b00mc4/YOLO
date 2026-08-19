@@ -7,6 +7,7 @@ from time import monotonic
 from fastapi import HTTPException, status
 from app.core.connection_limit import InMemoryConnectionLimiter
 from app.core.security import generate_secure_token, hash_token
+from app.models.user import UserRole
 
 CLOSE_SENTINEL = object()
 
@@ -141,3 +142,43 @@ class SSEChannel:
         dead = [queue for queue in list(self._global_subscribers) if not try_emit(queue, item)]
         for queue in dead:
             self._global_subscribers.discard(queue)
+
+class ChannelService:
+    def __init__(
+        self,
+        ticket_expire_seconds: int,
+        max_connections_per_user: int,
+        queue_maxsize: int,
+    ) -> None:
+        self._channel = SSEChannel(
+            ticket_expire_seconds=ticket_expire_seconds,
+            max_connections_per_user=max_connections_per_user,
+            queue_maxsize=queue_maxsize,
+        )
+
+    def issue_ticket(self, current_user) -> str:
+        scope_village_id = (
+            None if current_user.role == UserRole.SUPERADMIN else current_user.village_id
+        )
+        return self._channel.issue_ticket(current_user.id, scope_village_id)
+
+    def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None]:
+        return self._channel.resolve_ticket(raw_token)
+
+    def register_connection(self, user_id: uuid.UUID) -> None:
+        self._channel.register_connection(user_id)
+
+    def unregister_connection(self, user_id: uuid.UUID) -> None:
+        self._channel.unregister_connection(user_id)
+
+    def subscribe(self, village_id: uuid.UUID | None) -> asyncio.Queue:
+        return self._channel.subscribe(village_id)
+
+    def unsubscribe(self, village_id: uuid.UUID | None, queue: asyncio.Queue) -> None:
+        self._channel.unsubscribe(village_id, queue)
+
+    async def publish(self, village_id: uuid.UUID, event: str, data: dict) -> None:
+        await self._channel.publish(village_id, event, data)
+
+    async def publish_global(self, event: str, data: dict) -> None:
+        await self._channel.publish_global(event, data)

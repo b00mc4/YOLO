@@ -12,7 +12,7 @@ from app.core.sse_channel import CLOSE_SENTINEL
 from app.models.user import User, UserRole
 from app.schemas.presence import PresenceTicketResponse
 from app.schemas.sse import SSETicketResponse
-from app.services import presence_service, security_alert_service, session_validation_service, sse_service
+from app.services import channel_service, presence_service, session_validation_service
 
 router = APIRouter(prefix="/sse", tags=["sse"])
 
@@ -38,20 +38,20 @@ def _revalidation_due(last_revalidated_at: float) -> bool:
 async def create_sse_ticket(
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
 ):
-    ticket = sse_service.issue_ticket(current_user)
+    ticket = channel_service.alerts.issue_ticket(current_user)
     return SSETicketResponse(ticket=ticket)
 
 
 @router.get("/alerts")
 async def stream_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id = sse_service.resolve_ticket(ticket)
+    user_id, village_id = channel_service.alerts.resolve_ticket(ticket)
 
     try:
-        sse_service.register_connection(user_id)
+        channel_service.alerts.register_connection(user_id)
     except ConnectionLimitExceeded as exc:
         raise _connection_limit_exceeded_response(exc)
 
-    queue = sse_service.subscribe(village_id)
+    queue = channel_service.alerts.subscribe(village_id)
 
     async def event_generator():
         last_revalidated_at = monotonic()
@@ -73,8 +73,8 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
                 except asyncio.TimeoutError:
                     yield {"event": "ping", "data": ""}
         finally:
-            sse_service.unsubscribe(village_id, queue)
-            sse_service.unregister_connection(user_id)
+            channel_service.alerts.unsubscribe(village_id, queue)
+            channel_service.alerts.unregister_connection(user_id)
 
     return EventSourceResponse(event_generator())
 
@@ -87,20 +87,20 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
 async def create_security_alert_ticket(
     current_user: User = Depends(require_roles(*_SECURITY_ALLOWED_ROLES)),
 ):
-    ticket = security_alert_service.issue_ticket(current_user)
+    ticket = channel_service.security_alerts.issue_ticket(current_user)
     return SSETicketResponse(ticket=ticket)
 
 
 @router.get("/security-alerts")
 async def stream_security_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id = security_alert_service.resolve_ticket(ticket)
+    user_id, village_id = channel_service.security_alerts.resolve_ticket(ticket)
 
     try:
-        security_alert_service.register_connection(user_id)
+        channel_service.security_alerts.register_connection(user_id)
     except ConnectionLimitExceeded as exc:
         raise _connection_limit_exceeded_response(exc)
 
-    queue = security_alert_service.subscribe(village_id)
+    queue = channel_service.security_alerts.subscribe(village_id)
 
     async def event_generator():
         last_revalidated_at = monotonic()
@@ -122,8 +122,8 @@ async def stream_security_alerts(request: Request, ticket: str = Query(...)):
                 except asyncio.TimeoutError:
                     yield {"event": "ping", "data": ""}
         finally:
-            security_alert_service.unsubscribe(village_id, queue)
-            security_alert_service.unregister_connection(user_id)
+            channel_service.security_alerts.unsubscribe(village_id, queue)
+            channel_service.security_alerts.unregister_connection(user_id)
 
     return EventSourceResponse(event_generator())
 

@@ -114,9 +114,9 @@ async def _notify_sync_failure(
         await notification_service.notify_village(db, village_id, "camera_sync_failed", detail)
         await db.commit()
 
-    from app.services import sse_service
+    from app.services import channel_service
 
-    await sse_service.publish(
+    await channel_service.alerts.publish(
         village_id,
         "camera_sync_failed",
         {
