@@ -1,0 +1,90 @@
+from __future__ import annotations
+import asyncio
+import uuid
+from collections import OrderedDict, defaultdict
+from datetime import datetime, timedelta, timezone
+from time import monotonic
+from fastapi import HTTPException, status
+from app.core.security import generate_secure_token, hash_token
+
+
+class SSEChannel:
+    _SWEEP_INTERVAL_SECONDS = 60.0
+    _MAX_TRACKED_TICKETS = 10_000
+
+    def __init__(self, ticket_expire_seconds: int) -> None:
+        self._ticket_expire_seconds = ticket_expire_seconds
+        self._subscribers: dict[uuid.UUID, set[asyncio.Queue]] = defaultdict(set)
+        self._global_subscribers: set[asyncio.Queue] = set()
+        self._tickets: OrderedDict[str, tuple[uuid.UUID | None, datetime]] = OrderedDict()
+        self._last_sweep_at = monotonic()
+
+    def _sweep_expired_tickets(self) -> None:
+        now_monotonic = monotonic()
+        if now_monotonic - self._last_sweep_at < self._SWEEP_INTERVAL_SECONDS:
+            return
+        self._last_sweep_at = now_monotonic
+
+        now_utc = datetime.now(timezone.utc)
+        expired_keys = [
+            token_hash
+            for token_hash, (_, expire_at) in self._tickets.items()
+            if expire_at < now_utc
+        ]
+        for token_hash in expired_keys:
+            self._tickets.pop(token_hash, None)
+
+    def issue_ticket(self, scope_village_id: uuid.UUID | None) -> str:
+        self._sweep_expired_tickets()
+
+        if len(self._tickets) >= self._MAX_TRACKED_TICKETS:
+            self._tickets.popitem(last=False)
+
+        raw_token = generate_secure_token()
+        expire_at = datetime.now(timezone.utc) + timedelta(seconds=self._ticket_expire_seconds)
+        self._tickets[hash_token(raw_token)] = (scope_village_id, expire_at)
+        return raw_token
+
+    def resolve_ticket(self, raw_token: str) -> uuid.UUID | None:
+        ticket = self._tickets.pop(hash_token(raw_token), None)
+        if ticket is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+
+        village_id, expire_at = ticket
+        if expire_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+
+        return village_id
+
+    def subscribe(self, village_id: uuid.UUID | None) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue()
+        if village_id is None:
+            self._global_subscribers.add(queue)
+        else:
+            self._subscribers[village_id].add(queue)
+        return queue
+
+    def unsubscribe(self, village_id: uuid.UUID | None, queue: asyncio.Queue) -> None:
+        if village_id is None:
+            self._global_subscribers.discard(queue)
+            return
+
+        subscribers = self._subscribers.get(village_id)
+        if subscribers is None:
+            return
+        subscribers.discard(queue)
+        if not subscribers:
+            self._subscribers.pop(village_id, None)
+
+    async def publish(self, village_id: uuid.UUID, event: str, data: dict) -> None:
+        subscribers = self._subscribers.get(village_id)
+        if not subscribers:
+            return
+        for queue in list(subscribers):
+            await queue.put({"event": event, "data": data})
+
+    async def publish_global(self, event: str, data: dict) -> None:
+        if not self._global_subscribers:
+            return
+        for queue in list(self._global_subscribers):
+            await queue.put({"event": event, "data": data})
