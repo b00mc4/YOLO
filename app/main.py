@@ -9,7 +9,9 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import camera_service, camera_verification_service
+from app.services import camera_service, camera_verification_service, notification_service
+
+_NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -17,6 +19,17 @@ logger = logging.getLogger(__name__)
 _STARTUP_RESYNC_MAX_ATTEMPTS = 3
 _STARTUP_RESYNC_BACKOFF_BASE_SECONDS = 2.0
 
+
+async def _notification_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(_NOTIFICATION_CLEANUP_INTERVAL_SECONDS)
+        try:
+            async with async_session_maker() as db:
+                deleted = await notification_service.cleanup_old_notifications(db)
+            if deleted:
+                logger.info("Notification cleanup: removed %s expired notification(s)", deleted)
+        except Exception:
+            logger.exception("Notification cleanup loop iteration failed")
 
 async def _startup_camera_resync_background() -> None:
     for attempt in range(1, _STARTUP_RESYNC_MAX_ATTEMPTS + 1):
@@ -53,6 +66,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     verification_resume_task = asyncio.create_task(_resume_camera_verification_background())
     app.state.startup_verification_resume_task = verification_resume_task
+
+    clean_notification_task = asyncio.create_task(_notification_cleanup_loop())
+    app.state.startup_clean_notification_task = clean_notification_task
 
     yield
 
