@@ -7,16 +7,31 @@ from app.models.user import User, UserRole
 
 settings = get_settings()
 
-_channel = SSEChannel(ticket_expire_seconds=settings.sse_ticket_expire_seconds)
+_MAX_CONNECTIONS_PER_USER = 5
+_QUEUE_MAXSIZE = 100
+
+_channel = SSEChannel(
+    ticket_expire_seconds=settings.sse_ticket_expire_seconds,
+    max_connections_per_user=_MAX_CONNECTIONS_PER_USER,
+    queue_maxsize=_QUEUE_MAXSIZE,
+)
 
 
 def issue_ticket(current_user: User) -> str:
     scope_village_id = None if current_user.role == UserRole.SUPERADMIN else current_user.village_id
-    return _channel.issue_ticket(scope_village_id)
+    return _channel.issue_ticket(current_user.id, scope_village_id)
 
 
-def resolve_ticket(raw_token: str) -> uuid.UUID | None:
+def resolve_ticket(raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None]:
     return _channel.resolve_ticket(raw_token)
+
+
+def register_connection(user_id: uuid.UUID) -> None:
+    _channel.register_connection(user_id)
+
+
+def unregister_connection(user_id: uuid.UUID) -> None:
+    _channel.unregister_connection(user_id)
 
 
 def subscribe(village_id: uuid.UUID | None) -> asyncio.Queue:

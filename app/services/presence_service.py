@@ -9,8 +9,9 @@ from time import monotonic
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from app.core.config import get_settings
-from app.core.presence_limit import PresenceConnectionLimitExceeded
+from app.core.connection_limit import InMemoryConnectionLimiter
 from app.core.security import generate_secure_token, hash_token
+from app.core.sse_channel import try_emit
 from app.db.session import async_session_maker
 from app.models.group import Group
 from app.models.user import User, UserRole
@@ -26,6 +27,7 @@ settings = get_settings()
 _MAX_CONNECTIONS_PER_USER = 5
 _TICKET_SWEEP_INTERVAL_SECONDS = 60.0
 _MAX_TRACKED_TICKETS = 10_000
+_BROADCAST_QUEUE_MAXSIZE = 20
 
 
 class PresenceViewScope(str, enum.Enum):
@@ -64,7 +66,7 @@ _presence_by_village: dict[uuid.UUID, dict[uuid.UUID, set[uuid.UUID]]] = default
     lambda: defaultdict(set)
 )
 _presence_superadmins: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
-_conn_count_by_user: dict[uuid.UUID, int] = defaultdict(int)
+_connection_limiter = InMemoryConnectionLimiter()
 
 _broadcast_subscribers_by_village: dict[uuid.UUID, set[asyncio.Queue]] = defaultdict(set)
 _broadcast_subscribers_all: set[asyncio.Queue] = set()
@@ -263,9 +265,17 @@ async def _broadcast_to_village_watchers(village_id: uuid.UUID) -> None:
         if queue in _broadcast_subscribers_all:
             if all_snapshot_cache is None:
                 all_snapshot_cache = (await _build_all_villages_snapshot()).model_dump(mode="json")
-            await queue.put({"event": "presence_update", "data": all_snapshot_cache})
+            item = {"event": "presence_update", "data": all_snapshot_cache}
+            if not try_emit(queue, item):
+                _broadcast_subscribers_all.discard(queue)
         else:
-            await queue.put({"event": "presence_update", "data": single_village_snapshot})
+            item = {"event": "presence_update", "data": single_village_snapshot}
+            if not try_emit(queue, item):
+                subscribers = _broadcast_subscribers_by_village.get(village_id)
+                if subscribers is not None:
+                    subscribers.discard(queue)
+                    if not subscribers:
+                        _broadcast_subscribers_by_village.pop(village_id, None)
 
 
 async def _broadcast_superadmin_change() -> None:
@@ -275,29 +285,34 @@ async def _broadcast_superadmin_change() -> None:
 
     village_snapshot_cache: dict[uuid.UUID, dict] = {}
 
-    for village_id, subscribers in _broadcast_subscribers_by_village.items():
+    for village_id, subscribers in list(_broadcast_subscribers_by_village.items()):
         if not subscribers:
             continue
         if village_id not in village_snapshot_cache:
             village_snapshot_cache[village_id] = (
                 await _build_village_snapshot(village_id)
             ).model_dump(mode="json")
-        for queue in subscribers:
-            await queue.put(
-                {"event": "presence_update", "data": village_snapshot_cache[village_id]}
-            )
+
+        item = {"event": "presence_update", "data": village_snapshot_cache[village_id]}
+        dead = [queue for queue in list(subscribers) if not try_emit(queue, item)]
+        for queue in dead:
+            subscribers.discard(queue)
+        if not subscribers:
+            _broadcast_subscribers_by_village.pop(village_id, None)
 
     if _broadcast_subscribers_all:
         all_snapshot_cache = (await _build_all_villages_snapshot()).model_dump(mode="json")
-        for queue in _broadcast_subscribers_all:
-            await queue.put({"event": "presence_update", "data": all_snapshot_cache})
+        item = {"event": "presence_update", "data": all_snapshot_cache}
+        dead = [queue for queue in list(_broadcast_subscribers_all) if not try_emit(queue, item)]
+        for queue in dead:
+            _broadcast_subscribers_all.discard(queue)
 
 
 def register_watcher(ticket_data: _PresenceTicketData) -> asyncio.Queue | None:
     if ticket_data.view_scope == PresenceViewScope.NONE:
         return None
 
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=_BROADCAST_QUEUE_MAXSIZE)
     if ticket_data.view_scope == PresenceViewScope.ALL:
         _broadcast_subscribers_all.add(queue)
     else:
@@ -319,8 +334,7 @@ def unregister_watcher(ticket_data: _PresenceTicketData, queue: asyncio.Queue | 
 
 
 async def register_connection(ticket_data: _PresenceTicketData) -> uuid.UUID:
-    if _conn_count_by_user[ticket_data.user_id] >= _MAX_CONNECTIONS_PER_USER:
-        raise PresenceConnectionLimitExceeded(_MAX_CONNECTIONS_PER_USER)
+    _connection_limiter.register(ticket_data.user_id, _MAX_CONNECTIONS_PER_USER)
 
     conn_id = uuid.uuid4()
 
@@ -331,7 +345,6 @@ async def register_connection(ticket_data: _PresenceTicketData) -> uuid.UUID:
         role=ticket_data.role,
         village_id=ticket_data.village_id,
     )
-    _conn_count_by_user[ticket_data.user_id] += 1
 
     if ticket_data.village_id is None:
         was_first_connection = not _presence_superadmins.get(ticket_data.user_id)
@@ -353,9 +366,7 @@ async def unregister_connection(conn_id: uuid.UUID) -> None:
     if conn is None:
         return
 
-    _conn_count_by_user[conn.user_id] -= 1
-    if _conn_count_by_user[conn.user_id] <= 0:
-        _conn_count_by_user.pop(conn.user_id, None)
+    _connection_limiter.unregister(conn.user_id)
 
     if conn.village_id is None:
         user_conns = _presence_superadmins.get(conn.user_id)

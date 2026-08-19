@@ -5,7 +5,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 from app.api.deps import require_roles
-from app.core.presence_limit import PresenceConnectionLimitExceeded
+from app.core.connection_limit import ConnectionLimitExceeded
+from app.core.sse_channel import CLOSE_SENTINEL
 from app.models.user import User, UserRole
 from app.schemas.presence import PresenceTicketResponse
 from app.schemas.sse import SSETicketResponse
@@ -18,6 +19,13 @@ _SECURITY_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
 _PING_INTERVAL_SECONDS = 15
 
 
+def _connection_limit_exceeded_response(exc: ConnectionLimitExceeded) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=f"Too many concurrent connections for this account (max {exc.max_connections})",
+    )
+
+
 @router.post("/ticket", response_model=SSETicketResponse, status_code=status.HTTP_201_CREATED)
 async def create_sse_ticket(
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
@@ -28,7 +36,13 @@ async def create_sse_ticket(
 
 @router.get("/alerts")
 async def stream_alerts(request: Request, ticket: str = Query(...)):
-    village_id = sse_service.resolve_ticket(ticket)
+    user_id, village_id = sse_service.resolve_ticket(ticket)
+
+    try:
+        sse_service.register_connection(user_id)
+    except ConnectionLimitExceeded as exc:
+        raise _connection_limit_exceeded_response(exc)
+
     queue = sse_service.subscribe(village_id)
 
     async def event_generator():
@@ -38,11 +52,14 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
                     break
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
+                    if event is CLOSE_SENTINEL:
+                        break
                     yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
                 except asyncio.TimeoutError:
                     yield {"event": "ping", "data": ""}
         finally:
             sse_service.unsubscribe(village_id, queue)
+            sse_service.unregister_connection(user_id)
 
     return EventSourceResponse(event_generator())
 
@@ -61,7 +78,13 @@ async def create_security_alert_ticket(
 
 @router.get("/security-alerts")
 async def stream_security_alerts(request: Request, ticket: str = Query(...)):
-    village_id = security_alert_service.resolve_ticket(ticket)
+    user_id, village_id = security_alert_service.resolve_ticket(ticket)
+
+    try:
+        security_alert_service.register_connection(user_id)
+    except ConnectionLimitExceeded as exc:
+        raise _connection_limit_exceeded_response(exc)
+
     queue = security_alert_service.subscribe(village_id)
 
     async def event_generator():
@@ -71,11 +94,14 @@ async def stream_security_alerts(request: Request, ticket: str = Query(...)):
                     break
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
+                    if event is CLOSE_SENTINEL:
+                        break
                     yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
                 except asyncio.TimeoutError:
                     yield {"event": "ping", "data": ""}
         finally:
             security_alert_service.unsubscribe(village_id, queue)
+            security_alert_service.unregister_connection(user_id)
 
     return EventSourceResponse(event_generator())
 
@@ -99,14 +125,8 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
 
     try:
         conn_id = await presence_service.register_connection(ticket_data)
-    except PresenceConnectionLimitExceeded as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=(
-                f"Too many concurrent connections for this account "
-                f"(max {exc.max_connections})"
-            ),
-        )
+    except ConnectionLimitExceeded as exc:
+        raise _connection_limit_exceeded_response(exc)
 
     watcher_queue = presence_service.register_watcher(ticket_data)
 
@@ -132,6 +152,8 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
                     event = await asyncio.wait_for(
                         watcher_queue.get(), timeout=_PING_INTERVAL_SECONDS
                     )
+                    if event is CLOSE_SENTINEL:
+                        break
                     yield {
                         "event": event["event"],
                         "data": json.dumps(event["data"], default=str),
