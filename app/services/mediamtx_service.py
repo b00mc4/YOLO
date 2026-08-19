@@ -89,4 +89,4 @@ async def get_path_status(camera_id: uuid.UUID) -> bool | None:
         return None
 
     body = response.json()
-    return body.get("source") is not None
+    return bool(body.get("ready", False))
