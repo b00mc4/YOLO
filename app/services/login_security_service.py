@@ -36,7 +36,7 @@ async def publish_bruteforce_alert(
 ) -> None:
     occurred_at = datetime.now(timezone.utc)
     user_id = user.id if user is not None else None
-    village_id = user.village_id if user is not None else Non
+    village_id = user.village_id if user is not None else None
 
     detail = (
         f"account locked for {locked_for_seconds:.0f}s after repeated failed "
