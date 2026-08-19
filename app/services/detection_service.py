@@ -37,6 +37,7 @@ from app.services import (
     mediamtx_service,
     sse_service,
     storage_service,
+    notification_service
 )
 import logging
 from app.core.timezone import BANGKOK_TZ
@@ -310,6 +311,16 @@ async def create_detection(
             action="blacklist_detection",
             detail=f"blacklisted plate detected: {payload.license_plate} ({payload.province})",
             village_id=camera.village_id,
+        )
+        await notification_service.notify_village(
+            db, camera.village_id, "blacklist_alert",
+            f"blacklisted plate detected: {payload.license_plate} ({payload.province})",
+        )
+
+    if is_whitelist:
+        await notification_service.notify_village(
+            db, camera.village_id, "whitelist_alert",
+            f"whitelisted plate detected: {payload.license_plate} ({payload.province})",
         )
 
     try:

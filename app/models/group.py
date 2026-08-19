@@ -20,3 +20,4 @@ class Group(Base):
     blacklist_entries = relationship("Blacklist", back_populates="village")
     whitelist_entries = relationship("Whitelist", back_populates="village")
     audit_logs = relationship("AuditLog", back_populates="village")
+    notifications = relationship("Notification", back_populates="village")

@@ -23,7 +23,7 @@ from app.schemas.camera import (
     CameraVerificationCheckRead,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service
+from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service
 from app.services.ai_vision_service import VerificationCheckResult
 
 settings = get_settings()
@@ -111,6 +111,7 @@ async def _notify_sync_failure(
             detail=detail,
             village_id=village_id,
         )
+        await notification_service.notify_village(db, village_id, "camera_sync_failed", detail)
         await db.commit()
 
     from app.services import sse_service

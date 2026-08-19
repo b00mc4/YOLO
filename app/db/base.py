@@ -10,3 +10,4 @@ from app.models.contact import Contact
 from app.models.verify import Verify
 from app.models.refresh_token import RefreshToken
 from app.models.audit_log import AuditLog
+from app.models.notification import Notification

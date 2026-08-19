@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import auth, detection, camera, villages, blacklist, whitelist, contacts, audit_logs, users, sse, reports
+from app.api.endpoints import auth, detection, camera, villages, blacklist, whitelist, contacts, audit_logs, users, sse, reports, notifications
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(auth.router)
@@ -13,3 +13,4 @@ api_router.include_router(contacts.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(reports.router)
 api_router.include_router(sse.router)
+api_router.include_router(notifications.router)

@@ -42,3 +42,4 @@ class User(Base):
     blacklist_entries_added = relationship("Blacklist", back_populates="added_by_user")
     whitelist_entries_added = relationship("Whitelist", back_populates="added_by_user")
     audit_logs = relationship("AuditLog", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")

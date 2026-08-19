@@ -8,7 +8,7 @@ from fastapi import Request
 from sqlalchemy import select
 from app.db.session import async_session_maker
 from app.models.camera import Camera, CameraVerificationStatus
-from app.services import ai_vision_service, audit_service
+from app.services import ai_vision_service, audit_service, notification_service
 from app.services.ai_vision_service import VerificationCheckResult
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,8 @@ async def _finalize(
             user_id=user_id,
             village_id=camera.village_id,
         )
+        await notification_service.notify_village(db, camera.village_id, action, detail)
+        await notification_service.notify_superadmins(db, action, detail)
         await db.commit()
 
         village_id = camera.village_id
