@@ -2,17 +2,21 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from time import monotonic
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 from app.api.deps import require_roles
+from app.core.config import get_settings
 from app.core.connection_limit import ConnectionLimitExceeded
 from app.core.sse_channel import CLOSE_SENTINEL
 from app.models.user import User, UserRole
 from app.schemas.presence import PresenceTicketResponse
 from app.schemas.sse import SSETicketResponse
-from app.services import presence_service, security_alert_service, sse_service
+from app.services import presence_service, security_alert_service, session_validation_service, sse_service
 
 router = APIRouter(prefix="/sse", tags=["sse"])
+
+settings = get_settings()
 
 _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.USER, UserRole.SUPERADMIN)
 _SECURITY_ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
@@ -24,6 +28,10 @@ def _connection_limit_exceeded_response(exc: ConnectionLimitExceeded) -> HTTPExc
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         detail=f"Too many concurrent connections for this account (max {exc.max_connections})",
     )
+
+
+def _revalidation_due(last_revalidated_at: float) -> bool:
+    return monotonic() - last_revalidated_at >= settings.sse_revalidation_interval_seconds
 
 
 @router.post("/ticket", response_model=SSETicketResponse, status_code=status.HTTP_201_CREATED)
@@ -46,10 +54,17 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
     queue = sse_service.subscribe(village_id)
 
     async def event_generator():
+        last_revalidated_at = monotonic()
         try:
             while True:
                 if await request.is_disconnected():
                     break
+
+                if _revalidation_due(last_revalidated_at):
+                    if not await session_validation_service.is_session_still_valid(user_id, village_id):
+                        break
+                    last_revalidated_at = monotonic()
+
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
                     if event is CLOSE_SENTINEL:
@@ -88,10 +103,17 @@ async def stream_security_alerts(request: Request, ticket: str = Query(...)):
     queue = security_alert_service.subscribe(village_id)
 
     async def event_generator():
+        last_revalidated_at = monotonic()
         try:
             while True:
                 if await request.is_disconnected():
                     break
+
+                if _revalidation_due(last_revalidated_at):
+                    if not await session_validation_service.is_session_still_valid(user_id, village_id):
+                        break
+                    last_revalidated_at = monotonic()
+
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
                     if event is CLOSE_SENTINEL:
@@ -131,6 +153,7 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
     watcher_queue = presence_service.register_watcher(ticket_data)
 
     async def event_generator():
+        last_revalidated_at = monotonic()
         try:
             initial_snapshot = await presence_service.build_snapshot_for_ticket(ticket_data)
             if initial_snapshot is not None:
@@ -142,6 +165,13 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
             while True:
                 if await request.is_disconnected():
                     break
+
+                if _revalidation_due(last_revalidated_at):
+                    if not await session_validation_service.is_session_still_valid(
+                        ticket_data.user_id, ticket_data.village_id
+                    ):
+                        break
+                    last_revalidated_at = monotonic()
 
                 if watcher_queue is None:
                     await asyncio.sleep(_PING_INTERVAL_SECONDS)

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = Field(default=1, ge=1)
 
     sse_ticket_expire_seconds: int = 30
+    sse_revalidation_interval_seconds: int = 30
 
     api_key_header_name: str = "X-API-Key"
     api_key: str
