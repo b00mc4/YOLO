@@ -2,10 +2,9 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-
 import jwt
 from argon2 import PasswordHasher
-from argon2.exceptions import VerificationError
+from argon2.exceptions import InvalidHash, VerificationError
 
 from app.core.config import get_settings
 
@@ -21,7 +20,7 @@ def hash_password(password: str):
 def verify_password(password: str, hashed: str):
     try:
         return _password_hasher.verify(hashed, password)
-    except VerificationError:
+    except (VerificationError, InvalidHash):
         return False
 
 

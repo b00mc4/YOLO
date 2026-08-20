@@ -32,25 +32,6 @@ class DetectionCreate(BaseModel):
             return parsed.replace(tzinfo=BANGKOK_TZ)
         return v
 
-    @classmethod
-    def as_form(
-        cls,
-        event_id: uuid.UUID = Form(...),
-        camera_id: uuid.UUID = Form(...),
-        license_plate: str = Form(..., max_length=255),
-        province: str = Form(..., max_length=255),
-        color: str = Form(..., max_length=255),
-        capture_time: str = Form(...),
-    ) -> DetectionCreate:
-        return cls(
-            event_id=event_id,
-            camera_id=camera_id,
-            license_plate=license_plate,
-            province=province,
-            color=color,
-            capture_time=capture_time,
-        )
-
 
 class CarRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)

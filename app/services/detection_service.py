@@ -245,9 +245,6 @@ async def create_detection(
             logger.exception(
                 "Failed to finalize implicit camera verification for camera_id=%s", camera.id
             )
-        else:
-            camera.verification_status = CameraVerificationStatus.VERIFIED
-            camera.ai_vision_synced_at = datetime.now(timezone.utc)
 
     car_id = uuid.uuid4()
 
