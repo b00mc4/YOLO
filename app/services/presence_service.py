@@ -100,10 +100,7 @@ def issue_presence_ticket(
             detail="Not allowed to specify village_id for this role",
         )
 
-    if current_user.role == UserRole.USER:
-        view_scope = PresenceViewScope.NONE
-        view_village_id = None
-    elif current_user.role == UserRole.ADMIN:
+    if current_user.role in (UserRole.USER, UserRole.ADMIN):
         view_scope = PresenceViewScope.OWN_VILLAGE
         view_village_id = current_user.village_id
     else:
