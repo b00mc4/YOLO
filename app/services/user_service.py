@@ -1,8 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request, status
-from fastapi.concurrency import run_in_threadpool
+from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
@@ -28,11 +27,8 @@ from app.schemas.user import (
     UserRegister
 )
 from app.services import audit_service, auth_service, email_service, village_service
-import logging
 from app.models.group import Group
 
-
-logger = logging.getLogger(__name__)
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 
 
@@ -160,20 +156,20 @@ async def _to_user_me_detail(db: AsyncSession, user: User) -> UserMeDetail:
         contacts=[ContactRead.model_validate(contact) for contact in contacts],
     )
 
-def _to_user_register(user: User, invite_email_sent: bool) -> UserRegister:
+def _to_user_register(user: User) -> UserRegister:
     return UserRegister(
         id=user.id,
         username=user.username,
         role=user.role,
         village_id=user.village_id,
         created_at=user.created_at,
-        invite_email_sent=invite_email_sent,
     )
 
 
 async def create_user(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     payload: UserCreate,
 ) -> UserRegister:
@@ -216,14 +212,9 @@ async def create_user(
     await db.commit()
     await db.refresh(user)
 
-    invite_email_sent = True
-    try:
-        await run_in_threadpool(email_service.send_invite_email, user.email, raw_token)
-    except Exception:
-        invite_email_sent = False
-        logger.warning("Failed to send invite email to new user: %s", user.username)
+    background_tasks.add_task(email_service.send_invite_email_background, user.email, raw_token)
 
-    return _to_user_register(user, invite_email_sent)
+    return _to_user_register(user)
 
 
 async def list_users(
@@ -351,6 +342,7 @@ async def reset_user_password(
 async def resend_invite(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     user_id: uuid.UUID,
 ) -> UserDetail:
@@ -378,15 +370,6 @@ async def resend_invite(
 
     raw_token = await auth_service.create_verify_token(db, target, VerifyType.INITIAL_SETUP)
 
-    try:
-        await run_in_threadpool(email_service.send_invite_email, target.email, raw_token)
-    except Exception:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send invite email",
-        )
-
     await auth_service.invalidate_pending_verify_tokens(
         db, target.id, VerifyType.INITIAL_SETUP, exclude_token_hash=hash_token(raw_token)
     )
@@ -402,6 +385,9 @@ async def resend_invite(
 
     await db.commit()
     await db.refresh(target)
+
+    background_tasks.add_task(email_service.send_invite_email_background, target.email, raw_token)
+
     return await _to_user_detail(db, target)
 
 

@@ -113,6 +113,12 @@ def send_invite_email(to_email: str, raw_token: str) -> None:
         ),
     )
 
+def send_invite_email_background(to_email: str, raw_token: str) -> None:
+    try:
+        send_invite_email(to_email, raw_token)
+    except Exception:
+        logger.warning("Failed to send invite email to %s", to_email)
+
 def send_set_password_email_background(to_email: str, raw_token: str) -> None:
     try:
         send_set_password_email(to_email, raw_token)

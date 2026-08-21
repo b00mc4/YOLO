@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
@@ -28,10 +28,11 @@ _ALLOWED_ROLES = (UserRole.ADMIN, UserRole.SUPERADMIN)
 async def create_user(
     payload: UserCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await user_service.create_user(db, request, current_user, payload)
+    return await user_service.create_user(db, request, background_tasks, current_user, payload)
 
 
 @router.get("", response_model=PaginatedResponse[UserSummary])
@@ -110,10 +111,11 @@ async def reset_user_password(
 async def resend_invite(
     user_id: uuid.UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await user_service.resend_invite(db, request, current_user, user_id)
+    return await user_service.resend_invite(db, request, background_tasks, current_user, user_id)
 
 
 @router.post("/{user_id}/unlock-account", response_model=MessageResponse)
