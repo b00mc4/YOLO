@@ -118,3 +118,87 @@ def send_set_password_email_background(to_email: str, raw_token: str) -> None:
         send_set_password_email(to_email, raw_token)
     except Exception:
         logger.warning("Failed to send password reset email to %s", to_email)
+
+def send_bulk_plain_email(
+    to_emails: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+) -> list[str]:
+    try:
+        smtp = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
+        smtp.starttls()
+        smtp.login(settings.smtp_user, settings.smtp_password)
+    except Exception:
+        _email_health.mark_failure()
+        raise
+
+    failed_recipients: list[str] = []
+    try:
+        for to_email in to_emails:
+            message = EmailMessage()
+            message["From"] = settings.smtp_from_email
+            message["To"] = to_email
+            message["Subject"] = subject
+            message.set_content(text_body)
+            message.add_alternative(html_body, subtype="html")
+
+            try:
+                smtp.send_message(message)
+            except Exception:
+                logger.warning("Failed to send bulk email to %s", to_email)
+                failed_recipients.append(to_email)
+    finally:
+        smtp.quit()
+
+    _email_health.mark_recovered()
+    return failed_recipients
+
+
+def _render_blacklist_alert_html(
+    camera_name: str, license_plate: str, province: str, detected_at_local: str
+) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="th">
+  <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 16px 0;font-size:20px;color:#b91c1c;">พบรถในบัญชีดำ</h1>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#374151;">
+                  <tr><td style="padding:4px 0;color:#6b7280;">ทะเบียน</td><td style="padding:4px 0;font-weight:600;">{license_plate}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">จังหวัด</td><td style="padding:4px 0;font-weight:600;">{province}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">กล้อง</td><td style="padding:4px 0;font-weight:600;">{camera_name}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">เวลา</td><td style="padding:4px 0;font-weight:600;">{detected_at_local}</td></tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+def send_blacklist_alert_email(
+    to_emails: list[str],
+    camera_name: str,
+    license_plate: str,
+    province: str,
+    detected_at_local: str,
+) -> list[str]:
+    subject = f"แจ้งเตือน: พบรถบัญชีดำ {license_plate} ({province})"
+    text_body = (
+        f"พบรถในบัญชีดำ\n"
+        f"ทะเบียน: {license_plate}\n"
+        f"จังหวัด: {province}\n"
+        f"กล้อง: {camera_name}\n"
+        f"เวลา: {detected_at_local}"
+    )
+    html_body = _render_blacklist_alert_html(camera_name, license_plate, province, detected_at_local)
+
+    return send_bulk_plain_email(to_emails, subject, text_body, html_body)

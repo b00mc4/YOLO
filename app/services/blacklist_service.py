@@ -1,15 +1,26 @@
 from __future__ import annotations
+import logging
 import uuid
+from datetime import datetime
+from fastapi.concurrency import run_in_threadpool
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
+from app.core.alert_cooldown import get_alert_cooldown
+from app.core.timezone import BANGKOK_TZ
+from app.db.session import async_session_maker
 from app.models.blacklist import Blacklist
 from app.models.whitelist import Whitelist
 from app.models.user import User, UserRole
 from app.schemas.blacklist import BlacklistCreate, BlacklistRead, BlacklistUpdate
 from app.schemas.common import PaginatedResponse
-from app.services import audit_service, village_service
+from app.services import audit_service, village_service, email_service
+
+
+logger = logging.getLogger(__name__)
+
+_EMAIL_ALERT_COOLDOWN_SECONDS = 15 * 60
 
 
 async def _resolve_village_id(
@@ -191,3 +202,87 @@ async def delete_blacklist_entry(
 
     await db.delete(entry)
     await db.commit()
+
+
+def _cooldown_key(camera_id: uuid.UUID, license_plate: str, province: str) -> str:
+    return f"blacklist_email:{camera_id}:{license_plate}:{province}"
+
+
+async def _log_skip(
+    village_id: uuid.UUID,
+    camera_name: str,
+    license_plate: str,
+    province: str,
+    reason: str,
+) -> None:
+    async with async_session_maker() as db:
+        await audit_service.log_action(
+            db,
+            request=None,
+            action="blacklist_email_alert_skipped",
+            detail=(
+                f"blacklist email alert skipped for '{camera_name}' "
+                f"({license_plate}/{province}): {reason}"
+            ),
+            village_id=village_id,
+        )
+        await db.commit()
+
+
+async def handle_blacklist_detection(
+    camera_id: uuid.UUID,
+    village_id: uuid.UUID,
+    camera_name: str,
+    license_plate: str,
+    province: str,
+    time_detect: datetime,
+) -> None:
+    if email_service.is_email_service_degraded():
+        await _log_skip(
+            village_id, camera_name, license_plate, province,
+            "email service is currently degraded",
+        )
+        return
+
+    if not get_alert_cooldown().allow(
+        _cooldown_key(camera_id, license_plate, province), _EMAIL_ALERT_COOLDOWN_SECONDS
+    ):
+        return
+
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(User.email).where(
+                User.village_id == village_id,
+                User.role.in_((UserRole.USER, UserRole.ADMIN)),
+                User.is_active.is_(True),
+            )
+        )
+        recipients = list(result.scalars().all())
+
+    if not recipients:
+        return
+
+    detected_at_local = time_detect.astimezone(BANGKOK_TZ).strftime("%d/%m/%Y %H:%M:%S")
+
+    try:
+        failed_recipients = await run_in_threadpool(
+            email_service.send_blacklist_alert_email,
+            recipients,
+            camera_name,
+            license_plate,
+            province,
+            detected_at_local,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send blacklist alert email for camera_id=%s plate=%s/%s",
+            camera_id, license_plate, province,
+        )
+        await _log_skip(village_id, camera_name, license_plate, province, "smtp send failed")
+        return
+
+    if failed_recipients:
+        logger.warning(
+            "Blacklist alert email partially failed for camera_id=%s plate=%s/%s: %s",
+            camera_id, license_plate, province, failed_recipients,
+        )

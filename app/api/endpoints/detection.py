@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
@@ -51,7 +51,9 @@ def _handle_webhook_test(raw_event_id: str | None) -> JSONResponse:
     )
 
 
-async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResponse:
+async def _handle_real_detection(
+    request: Request, db: AsyncSession, background_tasks: BackgroundTasks
+) -> JSONResponse:
     form = await request.form()
 
     image_crop = form.get("image_crop")
@@ -87,7 +89,7 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
             detail=_format_validation_error(exc),
         )
 
-    ack, is_new = await detection_service.create_detection(db, request, payload, image_crop, image_full)
+    ack, is_new = await detection_service.create_detection(db, request, background_tasks, payload, image_crop, image_full)
     status_code = status.HTTP_201_CREATED if is_new else status.HTTP_200_OK
     return JSONResponse(status_code=status_code, content=jsonable_encoder(ack))
 
@@ -99,20 +101,13 @@ async def _handle_real_detection(request: Request, db: AsyncSession) -> JSONResp
 )
 async def create_detection(
     request: Request,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-):
-    """
-    รับ webhook detection จาก AI vision service
-
-    Idempotent ตาม event_id: ถ้า event_id เคยถูกบันทึกแล้ว (retry ซ้ำจาก AI vision
-    เช่น กรณี timeout ไม่ได้รับ response รอบก่อน) จะตอบ 200 พร้อม event_id เดิม
-    แทนที่จะปฏิเสธด้วย 409 เพื่อให้ฝั่ง AI vision รู้ว่า event นี้ถูกรับเรียบร้อยแล้ว
-    ไม่ต้อง retry ต่อ ส่วนกรณีสร้าง record ใหม่จริงจะตอบ 201 ตามปกติ
-    """
+):   
     content_type = _content_type_prefix(request)
 
     if content_type == _MULTIPART_CONTENT_TYPE:
-        return await _handle_real_detection(request, db)
+        return await _handle_real_detection(request, db, background_tasks)
 
     raise HTTPException(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from fastapi import HTTPException, Request, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, Request, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,8 @@ from app.services import (
     channel_service,
     mediamtx_service,
     storage_service,
-    notification_service
+    notification_service,
+    blacklist_service
 )
 import logging
 from app.core.timezone import BANGKOK_TZ
@@ -219,6 +220,7 @@ def _build_global_detection_event_payload(
 async def create_detection(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     payload: DetectionCreate,
     image_crop: UploadFile,
     image_full: UploadFile,
@@ -345,6 +347,17 @@ async def create_detection(
         return DetectionCreateAck(event_id=existing.event_id), False
 
     await db.refresh(car)
+
+    if is_blacklist:
+        background_tasks.add_task(
+            blacklist_service.handle_blacklist_detection,
+            camera.id,
+            camera.village_id,
+            camera.name,
+            car.license_plate,
+            car.province,
+            car.time_detect,
+        )
 
     try:
         event_payload = _build_detection_event_payload(request, camera, car)
