@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
-from app.models.camera import CameraVerificationStatus
+from app.models.camera import CameraDirection, CameraVerificationStatus
 
 
 class CameraCreate(BaseModel):
@@ -11,6 +11,7 @@ class CameraCreate(BaseModel):
     lat: float = Field(ge=-90, le=90)
     long: float = Field(ge=-180, le=180)
     stream_ai: str = Field(max_length=255)
+    direction: CameraDirection
 
 
 class CameraUpdate(BaseModel):
@@ -18,6 +19,7 @@ class CameraUpdate(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     long: float | None = Field(default=None, ge=-180, le=180)
     stream_ai: str | None = Field(default=None, max_length=255)
+    direction: CameraDirection | None = None
     is_active: bool | None = None
 
 
@@ -30,6 +32,7 @@ class CameraRead(BaseModel):
     lat: float
     long: float
     stream_ai: str
+    direction: CameraDirection | None
     stream_url: str
     webhook_url: str
     verification_status: CameraVerificationStatus
@@ -45,6 +48,7 @@ class CameraBasicRead(BaseModel):
     name: str
     lat: float
     long: float
+    direction: CameraDirection | None
     is_active: bool
 
 

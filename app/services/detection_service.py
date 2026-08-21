@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.models.blacklist import Blacklist
 from app.models.whitelist import Whitelist
-from app.models.camera import Camera, CameraVerificationStatus
+from app.models.camera import Camera, CameraDirection, CameraVerificationStatus
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
@@ -61,6 +61,7 @@ def _to_car_read(car: Car, request: Request) -> CarRead:
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
         is_whitelist=car.is_whitelist,
+        direction=car.direction,
         created_at=car.created_at,
     )
 
@@ -81,6 +82,7 @@ def _to_car_detail_read(car: Car, camera: Camera, village: Group, request: Reque
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
         is_whitelist=car.is_whitelist,
+        direction=car.direction,
         created_at=car.created_at,
         camera=CameraSummary(
             id=camera.id,
@@ -170,6 +172,7 @@ def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
         is_whitelist=car.is_whitelist,
+        direction=car.direction,
         camera=DetectionEventCamera(
             id=camera.id,
             name=camera.name,
@@ -196,6 +199,7 @@ def _build_global_detection_event_payload(
         time_detect=car.time_detect,
         is_blacklist=car.is_blacklist,
         is_whitelist=car.is_whitelist,
+        direction=car.direction,
         camera=DetectionEventCameraGlobal(
             id=camera.id,
             name=camera.name,
@@ -298,6 +302,7 @@ async def create_detection(
         time_detect=payload.capture_time,
         is_blacklist=is_blacklist,
         is_whitelist=is_whitelist,
+        direction=camera.direction,
     )
     db.add(car)
 
@@ -374,6 +379,7 @@ async def list_detections(
     time_detect_to: datetime | None,
     is_blacklist: bool | None,
     is_whitelist: bool | None,
+    direction: CameraDirection | None,
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
@@ -396,6 +402,8 @@ async def list_detections(
         stmt = stmt.where(Car.is_blacklist == is_blacklist)
     if is_whitelist is not None:
         stmt = stmt.where(Car.is_whitelist == is_whitelist)
+    if direction is not None:
+        stmt = stmt.where(Car.direction == direction)
 
     count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
     total = count_result.scalar_one()
@@ -542,6 +550,22 @@ async def get_today_dashboard(
 )
     whitelist_detections_today = whitelist_result.scalar_one()
 
+    entry_result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters, Car.direction == CameraDirection.ENTRY)
+    )
+    entry_detections_today = entry_result.scalar_one()
+
+    exit_result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters, Car.direction == CameraDirection.EXIT)
+    )
+    exit_detections_today = exit_result.scalar_one()
+
     top_repeated_result = await db.execute(
         select(Car.license_plate, Car.province, func.count())
         .join(Camera, Car.camera_id == Camera.id)
@@ -571,6 +595,8 @@ async def get_today_dashboard(
         unique_plates_today=unique_plates_today,
         blacklist_detections_today=blacklist_detections_today,
         whitelist_detections_today=whitelist_detections_today,
+        entry_detections_today=entry_detections_today,
+        exit_detections_today=exit_detections_today,
         top_repeated_plates=top_repeated_plates,
         latest_detections=latest_detections,
     )

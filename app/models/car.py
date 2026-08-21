@@ -1,11 +1,13 @@
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, false
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+from app.models.camera import CameraDirection
 
 class Car(Base):
     __tablename__ = "CarTABLE"
@@ -21,6 +23,14 @@ class Car(Base):
     time_detect = Column(DateTime(timezone=True), nullable=False, index=True)
     is_blacklist = Column(Boolean, nullable=False, server_default=false())
     is_whitelist = Column(Boolean, nullable=False, server_default=false())
+    direction = Column(
+        SAEnum(
+            CameraDirection,
+            name="camera_direction",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=True,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     camera = relationship("Camera", back_populates="detections")

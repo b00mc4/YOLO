@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.models.camera import CameraDirection
 from app.models.user import User
 from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck, DetectionDashboardRead
 from app.schemas.common import PaginatedResponse
@@ -131,6 +132,7 @@ async def list_detections(
     time_detect_to: datetime | None = Query(default=None),
     is_blacklist: bool | None = Query(default=None),
     is_whitelist: bool | None = Query(default=None),
+    direction: CameraDirection | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -149,6 +151,7 @@ async def list_detections(
         time_detect_to=time_detect_to,
         is_blacklist=is_blacklist,
         is_whitelist=is_whitelist,
+        direction=direction,
         page=page,
         page_size=page_size,
     )

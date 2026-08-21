@@ -9,7 +9,7 @@ from app.api.deps import verify_village_scope
 from app.core.config import get_settings
 from app.core.rate_limit import get_rate_limiter
 from app.db.session import async_session_maker
-from app.models.camera import Camera, CameraVerificationStatus
+from app.models.camera import Camera, CameraDirection, CameraVerificationStatus
 from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
@@ -82,6 +82,7 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         lat=camera.lat,
         long=camera.long,
         stream_ai=camera.stream_ai,
+        direction=camera.direction,
         stream_url=mediamtx_service.derive_stream_url(camera.id),
         webhook_url=ai_vision_service.derive_webhook_url(),
         verification_status=camera.verification_status,
@@ -211,6 +212,7 @@ async def create_camera(
         lat=payload.lat,
         long=payload.long,
         stream_ai=payload.stream_ai,
+        direction=payload.direction,
         is_active=True,
         verification_status=CameraVerificationStatus.PENDING,
     )
@@ -221,7 +223,7 @@ async def create_camera(
         db,
         request,
         action="camera_created",
-        detail=f"camera created: {camera.name}",
+        detail=f"camera created: {camera.name} (direction={camera.direction.value})",
         user_id=current_user.id,
         village_id=village_id,
     )
@@ -269,6 +271,7 @@ async def list_cameras(
     current_user: User,
     village_id_filter: uuid.UUID | None,
     is_active_filter: bool | None,
+    direction_filter: CameraDirection | None,
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CameraRead]:
@@ -291,6 +294,10 @@ async def list_cameras(
     if is_active_filter is not None:
         stmt = stmt.where(Camera.is_active == is_active_filter)
         count_stmt = count_stmt.where(Camera.is_active == is_active_filter)
+
+    if direction_filter is not None:
+        stmt = stmt.where(Camera.direction == direction_filter)
+        count_stmt = count_stmt.where(Camera.direction == direction_filter)
 
     total_result = await db.execute(count_stmt)
     total = total_result.scalar_one()
@@ -646,11 +653,6 @@ async def _deactivate_camera_guarded(
         return camera, failed_services
 
 async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
-    """
-    Village ถูกปิดใช้งาน (is_active: true -> false) ตัด mediamtx path และปิดสถานะ
-    active ฝั่ง ai_vision ของทุกกล้องที่ยัง is_active อยู่ในหมู่บ้านนี้ เพื่อไม่ให้สตรีม
-    หรือการรับ detection ยังเปิดค้างต่อได้หลัง village ถูกปิดแล้ว
-    """
     async with async_session_maker() as db:
         result = await db.execute(
             select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))
@@ -678,12 +680,6 @@ async def _activate_camera_guarded(
 
 
 async def activate_village_cameras(village_id: uuid.UUID) -> None:
-    """
-    Village ถูกเปิดใช้งานกลับมา (is_active: false -> true) resync mediamtx path
-    และ ai_vision config ของทุกกล้องที่ is_active อยู่ในหมู่บ้านนี้ ให้กลับมาใช้งานได้
-    เหมือนเดิม โดยไม่ต้องรอ admin สั่ง resync-all เอง เพราะ re-POST ไปหา ai_vision
-    ใหม่ ทุกตัวจะถูก reset เป็น pending แล้วเข้า verify loop เหมือนสร้างกล้องใหม่
-    """
     async with async_session_maker() as db:
         result = await db.execute(
             select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))

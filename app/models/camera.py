@@ -16,6 +16,11 @@ class CameraVerificationStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class CameraDirection(str, enum.Enum):
+    ENTRY = "entry"
+    EXIT = "exit"
+
+
 class Camera(Base):
     __tablename__ = "CameraTABLE"
 
@@ -25,6 +30,14 @@ class Camera(Base):
     lat = Column(Float(53), nullable=False)
     long = Column(Float(53), nullable=False)
     stream_ai = Column(String(255), nullable=False)
+    direction = Column(
+        SAEnum(
+            CameraDirection,
+            name="camera_direction",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=True,
+    )
     verification_status = Column(
         SAEnum(
             CameraVerificationStatus,

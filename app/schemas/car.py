@@ -4,6 +4,7 @@ from datetime import date, datetime
 from fastapi import Form
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.core.timezone import BANGKOK_TZ
+from app.models.camera import CameraDirection
 
 _CAPTURE_TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
 
@@ -47,6 +48,7 @@ class CarRead(BaseModel):
     time_detect: datetime
     is_blacklist: bool
     is_whitelist: bool
+    direction: CameraDirection | None
     created_at: datetime
 
 
@@ -68,6 +70,7 @@ class CarDetailRead(BaseModel):
     time_detect: datetime
     is_blacklist: bool
     is_whitelist: bool
+    direction: CameraDirection | None
     created_at: datetime
     camera: CameraSummary
 
@@ -83,6 +86,8 @@ class DetectionDashboardRead(BaseModel):
     unique_plates_today: int
     blacklist_detections_today: int
     whitelist_detections_today: int
+    entry_detections_today: int
+    exit_detections_today: int
     top_repeated_plates: list[RepeatedPlateEntry]
     latest_detections: list[CarRead]
 
@@ -102,6 +107,7 @@ class DetectionEventPayload(BaseModel):
     time_detect: datetime
     is_blacklist: bool
     is_whitelist: bool
+    direction: CameraDirection | None
     camera: DetectionEventCamera
     image_crop: str
     image_full: str

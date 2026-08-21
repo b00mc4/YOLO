@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.camera import Camera
+from app.models.camera import Camera, CameraDirection
 from app.models.car import Car
 from app.models.user import User, UserRole
 from app.schemas.car import RepeatedPlateEntry
@@ -90,6 +90,16 @@ async def _count_blacklist(db: AsyncSession, base_filters: list) -> int:
     return result.scalar_one()
 
 
+async def _count_by_direction(db: AsyncSession, base_filters: list, direction: CameraDirection) -> int:
+    result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*base_filters, Car.direction == direction)
+    )
+    return result.scalar_one()
+
+
 async def _top_repeated_plates(db: AsyncSession, base_filters: list) -> list[RepeatedPlateEntry]:
     result = await db.execute(
         select(Car.license_plate, Car.province, func.count())
@@ -133,6 +143,8 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
         "unique_plates": await _count_unique_plates(db, base_filters),
         "blacklist_detections": await _count_blacklist(db, base_filters),
         "whitelist_detections": await _count_whitelist(db, base_filters),
+        "entry_detections": await _count_by_direction(db, base_filters, CameraDirection.ENTRY),
+        "exit_detections": await _count_by_direction(db, base_filters, CameraDirection.EXIT),
         "top_repeated_plates": await _top_repeated_plates(db, base_filters),
         "hourly_buckets": hourly_buckets,
         "peak_time": _compute_peak_time(hourly_buckets),
