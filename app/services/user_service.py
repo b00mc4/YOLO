@@ -279,6 +279,13 @@ async def set_user_active_status(
     payload: UserStatusUpdate,
 ) -> UserDetail:
     target = await _get_user_or_404(db, user_id)
+
+    if target.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ไม่สามารถเปลี่ยนสถานะบัญชีตัวเองได้",
+        )
+
     _verify_user_write_scope(current_user, target)
 
     previous_is_active = target.is_active
