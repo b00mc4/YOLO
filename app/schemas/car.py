@@ -138,3 +138,39 @@ class CameraLiveRead(BaseModel):
 
 class DetectionCreateAck(BaseModel):
     event_id: uuid.UUID
+
+class RouteTrackingDetectionEntry(BaseModel):
+    detection_id: uuid.UUID
+    camera_id: uuid.UUID
+    camera_name: str
+    village_id: uuid.UUID
+    village_name: str
+    lat: float
+    long: float
+    direction: CameraDirection | None
+    time_detect: datetime
+    color: str
+    is_blacklist: bool
+    is_whitelist: bool
+    image_crop: str
+    image_full: str
+
+
+class RouteTrackingCarGroup(BaseModel):
+    license_plate: str
+    province: str
+    detection_count: int
+    detections: list[RouteTrackingDetectionEntry]
+
+
+class RouteTrackingDayEntry(BaseModel):
+    date: date
+    cars: list[RouteTrackingCarGroup]
+
+
+class RouteTrackingRead(BaseModel):
+    items: list[RouteTrackingDayEntry]
+    total_dates: int
+    total_detections: int
+    page: int
+    page_size: int

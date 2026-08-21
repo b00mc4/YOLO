@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
@@ -11,7 +11,15 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.camera import CameraDirection
 from app.models.user import User
-from app.schemas.car import CameraLiveRead, CarDetailRead, CarRead, DetectionCreate, DetectionCreateAck, DetectionDashboardRead
+from app.schemas.car import (
+    CameraLiveRead,
+    CarDetailRead,
+    CarRead,
+    DetectionCreate,
+    DetectionCreateAck,
+    DetectionDashboardRead,
+    RouteTrackingRead,
+)
 from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 import logging
@@ -193,3 +201,33 @@ async def get_detection_image(
         db, current_user, detection_id, variant
     )
     return FileResponse(file_path, media_type=media_type)
+
+@router.get("/route-tracking", response_model=RouteTrackingRead)
+async def get_route_tracking(
+    request: Request,
+    license_plate: str = Query(..., min_length=1),
+    province: str | None = Query(default=None),
+    color: str | None = Query(default=None),
+    direction: CameraDirection | None = Query(default=None),
+    village_id: uuid.UUID | None = Query(default=None),
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await detection_service.get_route_tracking(
+        db,
+        request,
+        current_user,
+        license_plate,
+        province,
+        color,
+        direction,
+        village_id,
+        date_from,
+        date_to,
+        page,
+        page_size,
+    )

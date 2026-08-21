@@ -122,3 +122,21 @@ class ValidationErrors:
     PASSWORD_MISMATCH = "รหัสผ่านใหม่และรหัสผ่านยืนยันไม่ตรงกัน"
     SUPERADMIN_NO_VILLAGE = "superadmin ต้องไม่มี village_id"
     VILLAGE_REQUIRED_FOR_ROLE = "ต้องระบุ village_id สำหรับสิทธิ์การใช้งานนี้"
+
+class DetectionErrors:
+    NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
+    IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
+    CAMERA_VILLAGE_INACTIVE = "หมู่บ้านของกล้องนี้ถูกระงับการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
+    CAMERA_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
+    STORE_IMAGE_FAILED = "บันทึกรูปภาพการตรวจจับไม่สำเร็จ"
+    REQUIRED_FILES_MISSING = "ต้องแนบไฟล์ image_crop และ image_full"
+    LICENSE_PLATE_REQUIRED = "ต้องระบุ license_plate"
+    DATE_RANGE_INVALID = "date_to ต้องมากกว่าหรือเท่ากับ date_from"
+
+    @staticmethod
+    def unsupported_request_content_type(content_type: str) -> str:
+        return f"ไม่รองรับ Content-Type: {content_type}"
+
+    @staticmethod
+    def date_range_too_wide(max_days: int) -> str:
+        return f"ช่วงวันที่ต้องไม่เกิน {max_days} วัน"

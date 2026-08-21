@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import BackgroundTasks, HTTPException, Request, UploadFile, status
@@ -27,7 +28,11 @@ from app.schemas.car import (
     DetectionEventPayloadGlobal,
     LiveCaptureEntry,
     RepeatedPlateEntry,
-    DetectionCreateAck
+    DetectionCreateAck,
+    RouteTrackingCarGroup,
+    RouteTrackingDayEntry,
+    RouteTrackingDetectionEntry,
+    RouteTrackingRead,
 )
 from app.schemas.common import PaginatedResponse
 from app.services import (
@@ -43,6 +48,9 @@ from app.services import (
 import logging
 from app.core.timezone import BANGKOK_TZ
 from app.core.error_messages import Common, DetectionErrors, CameraErrors
+
+
+_MAX_ROUTE_TRACKING_RANGE_DAYS = 360
 
 logger = logging.getLogger(__name__)
 
@@ -654,4 +662,169 @@ async def get_camera_live_view(
         is_active=camera.is_active,
         stream_url=mediamtx_service.derive_stream_url(camera.id),
         latest_captures=latest_captures,
+    )
+
+
+def _validate_route_tracking_date_range(date_from: date, date_to: date) -> tuple[datetime, datetime]:
+    if date_to < date_from:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DetectionErrors.DATE_RANGE_INVALID)
+
+    if (date_to - date_from).days > _MAX_ROUTE_TRACKING_RANGE_DAYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=DetectionErrors.date_range_too_wide(_MAX_ROUTE_TRACKING_RANGE_DAYS),
+        )
+
+    start_utc = datetime(date_from.year, date_from.month, date_from.day, tzinfo=BANGKOK_TZ).astimezone(timezone.utc)
+    end_utc = (datetime(date_to.year, date_to.month, date_to.day, tzinfo=BANGKOK_TZ) + timedelta(days=1)).astimezone(timezone.utc)
+    return start_utc, end_utc
+
+
+def _build_route_tracking_filters(
+    scope_filters: list,
+    normalized_plate: str,
+    province: str | None,
+    color: str | None,
+    direction: CameraDirection | None,
+    start_utc: datetime,
+    end_utc: datetime,
+) -> list:
+    filters = [
+        *scope_filters,
+        Car.license_plate.ilike(f"%{normalized_plate}%"),
+        Car.time_detect >= start_utc,
+        Car.time_detect < end_utc,
+    ]
+    if province is not None:
+        filters.append(Car.province == province)
+    if color is not None:
+        filters.append(Car.color.ilike(f"%{color}%"))
+    if direction is not None:
+        filters.append(Car.direction == direction)
+    return filters
+
+
+async def get_route_tracking(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    license_plate: str,
+    province: str | None,
+    color: str | None,
+    direction: CameraDirection | None,
+    village_id: uuid.UUID | None,
+    date_from: date,
+    date_to: date,
+    page: int,
+    page_size: int,
+) -> RouteTrackingRead:
+    normalized_plate = license_plate.strip().upper()
+    if not normalized_plate:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DetectionErrors.LICENSE_PLATE_REQUIRED)
+
+    scope_filters = _build_detection_list_scope_filters(current_user, village_id)
+    start_utc, end_utc = _validate_route_tracking_date_range(date_from, date_to)
+    filters = _build_route_tracking_filters(
+        scope_filters, normalized_plate, province, color, direction, start_utc, end_utc
+    )
+
+    bangkok_date_expr = func.date(func.timezone("Asia/Bangkok", Car.time_detect))
+
+    total_dates_result = await db.execute(
+        select(func.count(func.distinct(bangkok_date_expr)))
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*filters)
+    )
+    total_dates = total_dates_result.scalar_one()
+
+    total_detections_result = await db.execute(
+        select(func.count())
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*filters)
+    )
+    total_detections = total_detections_result.scalar_one()
+
+    page_dates_result = await db.execute(
+        select(bangkok_date_expr.label("d"))
+        .select_from(Car)
+        .join(Camera, Car.camera_id == Camera.id)
+        .where(*filters)
+        .group_by(bangkok_date_expr)
+        .order_by(bangkok_date_expr.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    page_dates = [row.d for row in page_dates_result.all()]
+
+    if not page_dates:
+        return RouteTrackingRead(
+            items=[],
+            total_dates=total_dates,
+            total_detections=total_detections,
+            page=page,
+            page_size=page_size,
+        )
+
+    detail_result = await db.execute(
+        select(Car, Camera, Group)
+        .join(Camera, Car.camera_id == Camera.id)
+        .join(Group, Camera.village_id == Group.id)
+        .where(*filters, bangkok_date_expr.in_(page_dates))
+        .order_by(Car.time_detect.asc())
+    )
+
+    by_date: dict[date, dict[tuple[str, str], list[tuple[Car, Camera, Group]]]] = defaultdict(lambda: defaultdict(list))
+    for car, camera, village in detail_result.all():
+        local_date = car.time_detect.astimezone(BANGKOK_TZ).date()
+        by_date[local_date][(car.license_plate, car.province)].append((car, camera, village))
+
+    day_entries: list[RouteTrackingDayEntry] = []
+    for d in page_dates:
+        groups = by_date.get(d, {})
+        sorted_groups = sorted(groups.items(), key=lambda item: item[1][0][0].time_detect)
+
+        cars: list[RouteTrackingCarGroup] = []
+        for (plate, province_value), rows in sorted_groups:
+            entries = [
+                RouteTrackingDetectionEntry(
+                    detection_id=car.id,
+                    camera_id=camera.id,
+                    camera_name=camera.name,
+                    village_id=village.id,
+                    village_name=village.name,
+                    lat=camera.lat,
+                    long=camera.long,
+                    direction=car.direction,
+                    time_detect=car.time_detect,
+                    color=car.color,
+                    is_blacklist=car.is_blacklist,
+                    is_whitelist=car.is_whitelist,
+                    image_crop=str(
+                        request.url_for("get_detection_image", detection_id=car.id, variant="crop")
+                    ),
+                    image_full=str(
+                        request.url_for("get_detection_image", detection_id=car.id, variant="full")
+                    ),
+                )
+                for car, camera, village in rows
+            ]
+            cars.append(
+                RouteTrackingCarGroup(
+                    license_plate=plate,
+                    province=province_value,
+                    detection_count=len(entries),
+                    detections=entries,
+                )
+            )
+
+        day_entries.append(RouteTrackingDayEntry(date=d, cars=cars))
+
+    return RouteTrackingRead(
+        items=day_entries,
+        total_dates=total_dates,
+        total_detections=total_detections,
+        page=page,
+        page_size=page_size,
     )
