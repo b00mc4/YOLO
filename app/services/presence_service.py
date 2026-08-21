@@ -21,6 +21,7 @@ from app.schemas.presence import (
     VillageBreakdownEntry,
     VillagePresenceSnapshot,
 )
+from app.core.error_messages import Common, RealtimeErrors
 
 settings = get_settings()
 
@@ -97,7 +98,7 @@ def issue_presence_ticket(
     if requested_village_id is not None and current_user.role != UserRole.SUPERADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
 
     if current_user.role in (UserRole.USER, UserRole.ADMIN):
@@ -137,7 +138,7 @@ def resolve_presence_ticket(raw_token: str) -> _PresenceTicketData:
     if data is None or data.expire_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired ticket",
+            detail=RealtimeErrors.INVALID_OR_EXPIRED_TICKET,
         )
     return data
 

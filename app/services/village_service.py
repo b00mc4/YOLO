@@ -13,6 +13,7 @@ from app.schemas.camera import CameraBasicRead
 from app.schemas.common import PaginatedResponse
 from app.schemas.village import VillageCreate, VillageDetailRead, VillageMemberSummary, VillageUpdate
 from app.services import audit_service, camera_service
+from app.core.error_messages import Common, VillageErrors
 
 async def create_village(
     db: AsyncSession,
@@ -42,7 +43,7 @@ async def get_village(db: AsyncSession, village_id: uuid.UUID) -> Group:
     village = result.scalar_one_or_none()
 
     if village is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Village not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=VillageErrors.NOT_FOUND)
 
     return village
 
@@ -57,7 +58,7 @@ async def get_village_detail(
     if current_user.role != UserRole.SUPERADMIN and current_user.village_id != village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to access this village",
+            detail=Common.VILLAGE_ACCESS_DENIED,
         )
 
     camera_result = await db.execute(

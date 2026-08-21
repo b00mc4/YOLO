@@ -42,6 +42,7 @@ from app.services import (
 )
 import logging
 from app.core.timezone import BANGKOK_TZ
+from app.core.error_messages import Common, DetectionErrors, CameraErrors
 
 logger = logging.getLogger(__name__)
 
@@ -102,19 +103,19 @@ async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CameraErrors.NOT_FOUND)
 
     camera, village_is_active = row
 
     if not village_is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Camera's village is inactive and cannot receive detections",
+            detail=DetectionErrors.CAMERA_VILLAGE_INACTIVE,
         )
     if not camera.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Camera is inactive and cannot receive detections",
+            detail=DetectionErrors.CAMERA_INACTIVE,
         )
     return camera
 
@@ -289,7 +290,7 @@ async def create_detection(
         await _cleanup_written_images(written_paths)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to store detection images",
+            detail=DetectionErrors.STORE_IMAGE_FAILED,
         )
 
     car = Car(
@@ -451,7 +452,7 @@ async def get_detection_detail(
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DetectionErrors.NOT_FOUND)
 
     car, camera, village = row
     verify_village_scope(current_user, camera.village_id)
@@ -472,7 +473,7 @@ async def get_detection_image_path(
     )
     row = result.first()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Detection not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DetectionErrors.NOT_FOUND)
 
     car, village_id = row
     verify_village_scope(current_user, village_id)
@@ -480,7 +481,7 @@ async def get_detection_image_path(
     relative_path = car.image_crop if variant == "crop" else car.image_full
     absolute_path = storage_service.resolve_storage_path(relative_path)
     if not absolute_path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image file not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DetectionErrors.IMAGE_FILE_NOT_FOUND)
 
     return absolute_path, storage_service.guess_media_type(absolute_path)
 
@@ -513,7 +514,7 @@ def _build_detection_list_scope_filters(
     if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [Camera.village_id == current_user.village_id]
 

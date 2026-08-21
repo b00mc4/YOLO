@@ -25,6 +25,7 @@ from app.schemas.camera import (
 from app.schemas.common import PaginatedResponse
 from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service
 from app.services.ai_vision_service import VerificationCheckResult
+from app.core.error_messages import CameraErrors, Common, VillageErrors
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -190,7 +191,7 @@ async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
     result = await db.execute(select(Group).where(Group.id == village_id))
     village = result.scalar_one_or_none()
     if village is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Village not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=VillageErrors.NOT_FOUND)
     return village
 
 async def create_camera(
@@ -246,7 +247,7 @@ async def get_camera(db: AsyncSession, current_user: User, camera_id: uuid.UUID)
     camera = result.scalar_one_or_none()
 
     if camera is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Camera not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CameraErrors.NOT_FOUND)
 
     verify_village_scope(current_user, camera.village_id)
     return camera
@@ -286,7 +287,7 @@ async def list_cameras(
         if village_id_filter is not None and village_id_filter != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to specify village_id for this role",
+                detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
             )
         stmt = stmt.where(Camera.village_id == current_user.village_id)
         count_stmt = count_stmt.where(Camera.village_id == current_user.village_id)
@@ -387,19 +388,13 @@ async def delete_camera(
     if detection_count_result.scalar_one() > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Camera has detection records and cannot be deleted. "
-                "Deactivate it instead."
-            ),
+            detail=(CameraErrors.DELETE_HAS_DETECTIONS),
         )
 
     if camera.ai_vision_synced_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Camera is already linked with the AI vision service and cannot be deleted. "
-                "Deactivate it instead."
-            ),
+            detail=(CameraErrors.DELETE_ALREADY_LINKE),
         )
 
     camera_id_value = camera.id
@@ -433,7 +428,7 @@ def _build_resync_scope_filters(
     if village_id_filter is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [Camera.village_id == current_user.village_id]
 
@@ -524,14 +519,14 @@ async def resync_camera_ai_vision(
     if not pushed:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to sync camera with ai vision service",
+            detail=CameraErrors.SYNC_WITH_AI_VISION_FAILED,
         )
 
     active_ok = await ai_vision_service.set_camera_active_status(camera.id, True)
     if not active_ok:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to sync camera with ai vision service",
+            detail=CameraErrors.SYNC_WITH_AI_VISION_FAILED,
         )
 
     camera.verification_status = CameraVerificationStatus.PENDING

@@ -15,6 +15,7 @@ from app.schemas.contact import (
     UserContactsDetail,
 )
 from app.services import audit_service
+from app.core.error_messages import Common, ContactErrors, UserErrors
 
 _MAX_CONTACTS_PER_USER = 10
 
@@ -22,7 +23,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=UserErrors.NOT_FOUND)
     return user
 
 
@@ -35,15 +36,15 @@ def _verify_write_scope(current_user: User, target: User) -> None:
         if target.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can manage an admin or superadmin's contacts",
+                detail=ContactErrors.SCOPE_ADMIN_ONLY_USER,
             )
         if target.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to manage contacts outside your village",
+                detail=ContactErrors.SCOPE_OUTSIDE_VILLAGE,
             )
         return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=Common.INSUFFICIENT_PERMISSIONS)
 
 
 def _verify_directory_scope(current_user: User, target_village_id: uuid.UUID | None) -> None:
@@ -54,7 +55,7 @@ def _verify_directory_scope(current_user: User, target_village_id: uuid.UUID | N
     if target_village_id != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to access this user's data",
+            detail=ContactErrors.DIRECTORY_ACCESS_DENIED,
         )
 
 
@@ -79,7 +80,7 @@ async def _get_contact_or_404(db: AsyncSession, contact_id: uuid.UUID) -> tuple[
     )
     row = result.first()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ContactErrors.NOT_FOUND)
     return row[0], row[1]
 
 
@@ -96,17 +97,17 @@ def _verify_contact_write_scope(
         if owner.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can manage an admin or superadmin's contacts",
+                detail=ContactErrors.SCOPE_ADMIN_ONLY_USER,
             )
         if owner.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to manage contacts outside your village",
+                detail=ContactErrors.SCOPE_OUTSIDE_VILLAGE,
             )
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Not allowed to manage another user's contact",
+        detail=ContactErrors.SCOPE_NOT_OWN_CONTACT,
     )
 
 
@@ -115,12 +116,12 @@ def _validate_content_type_consistency(content_type: ContactType, custom_label: 
         if not custom_label:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="custom_label is required when content_type is 'other'",
+                detail=ContactErrors.CUSTOM_LABEL_REQUIRED,
             )
     elif custom_label is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="custom_label must not be set unless content_type is 'other'",
+            detail=ContactErrors.CUSTOM_LABEL_NOT_ALLOWED,
         )
 
 
@@ -138,7 +139,7 @@ async def create_contact(
     if count_result.scalar_one() >= _MAX_CONTACTS_PER_USER:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User already has the maximum of {_MAX_CONTACTS_PER_USER} contacts",
+            detail=ContactErrors.max_contacts_reached(_MAX_CONTACTS_PER_USER),
         )
 
     contact = Contact(
@@ -175,7 +176,7 @@ async def get_user_contacts_detail(
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=UserErrors.NOT_FOUND)
 
     target_user, village_name = row
     _verify_directory_scope(current_user, target_user.village_id)

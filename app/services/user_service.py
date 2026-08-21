@@ -28,6 +28,7 @@ from app.schemas.user import (
 )
 from app.services import audit_service, auth_service, email_service, village_service
 from app.models.group import Group
+from app.core.error_messages import Common, UserErrors
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 
@@ -36,7 +37,7 @@ async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=UserErrors.NOT_FOUND)
     return user
 
 
@@ -49,38 +50,38 @@ def _verify_user_write_scope(current_user: User, target: User) -> None:
         if target.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only a superadmin can modify an admin or superadmin account",
+                detail=UserErrors.SCOPE_ADMIN_ONLY_USER,
             )
         if target.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to manage users outside your village",
+                detail=UserErrors.SCOPE_OUTSIDE_VILLAGE,
             )
         return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=Common.INSUFFICIENT_PERMISSIONS)
 
 
 def _verify_password_reset_scope(current_user: User, target: User) -> None:
     if target.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot reset your own password here, use change-password instead",
+            detail=UserErrors.CANNOT_RESET_OWN_PASSWORD,
         )
     if current_user.role == UserRole.SUPERADMIN:
         if target.role == UserRole.SUPERADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot reset another superadmin's password",
+                detail=UserErrors.CANNOT_RESET_SUPERADMIN_PASSWORD,
             )
         return
     if current_user.role == UserRole.ADMIN:
         if target.role != UserRole.USER or target.village_id != current_user.village_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to reset this user's password",
+                detail=UserErrors.SCOPE_PASSWORD_RESET_DENIED,
             )
         return
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=Common.INSUFFICIENT_PERMISSIONS)
 
 def _build_user_list_village_scope_filters(
     current_user: User, village_id_filter: uuid.UUID | None
@@ -93,7 +94,7 @@ def _build_user_list_village_scope_filters(
     if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [User.village_id == current_user.village_id]
 
@@ -177,7 +178,7 @@ async def create_user(
         if payload.role == UserRole.SUPERADMIN:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to create a superadmin account",
+                detail=UserErrors.CANNOT_CREATE_SUPERADMIN,
             )
         village_id = current_user.village_id
     else:
@@ -319,7 +320,7 @@ async def reset_user_password(
     if target.hashpassword is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This account has not set a password yet, use resend-invite instead",
+            detail=UserErrors.PASSWORD_NOT_SET_YET,
         )
 
     target.hashpassword = hash_password(payload.new_password)
@@ -352,7 +353,7 @@ async def resend_invite(
     if target.is_verify:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is already verified",
+            detail=UserErrors.ALREADY_VERIFIED,
         )
 
     last_sent_result = await db.execute(
@@ -365,7 +366,7 @@ async def resend_invite(
     if last_sent_at is not None and datetime.now(timezone.utc) - last_sent_at < _RESEND_INVITE_COOLDOWN:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Please wait before requesting another invite",
+            detail=UserErrors.RESEND_INVITE_COOLDOWN,
         )
 
     raw_token = await auth_service.create_verify_token(db, target, VerifyType.INITIAL_SETUP)

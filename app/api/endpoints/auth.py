@@ -17,6 +17,7 @@ from app.schemas.auth import (
 from app.schemas.common import MessageResponse
 from app.services import auth_service
 from app.api.deps import get_current_user, rate_limit_by_ip
+from app.core.error_messages import Auth
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -75,7 +76,7 @@ async def refresh(
     """แลก Refresh TOken โดยใช้ Cookie"""
     raw_refresh_token = request.cookies.get(auth_service.REFRESH_TOKEN_COOKIE_NAME)
     if raw_refresh_token is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.MISSING_REFRESH_TOKEN)
 
     access_token, new_raw_refresh_token = await auth_service.rotate_refresh_token(db, raw_refresh_token)
     _set_refresh_cookie(response, new_raw_refresh_token)

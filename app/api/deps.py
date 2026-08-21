@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.models.group import Group
 from app.core.rate_limit import RateLimitExceeded, get_rate_limiter
+from app.core.error_messages import Auth, Common
 
 settings = get_settings()
 
@@ -32,7 +33,7 @@ async def get_current_user(
     except (jwt.PyJWTError, ValueError, KeyError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=Auth.COULD_NOT_VALIDATE_CREDENTIALS,
             headers=_UNAUTHORIZED_HEADERS,
         )
 
@@ -46,7 +47,7 @@ async def get_current_user(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            detail=Auth.COULD_NOT_VALIDATE_CREDENTIALS,
             headers=_UNAUTHORIZED_HEADERS,
         )
 
@@ -56,21 +57,21 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is inactive",
+            detail=Auth.ACCOUNT_INACTIVE,
             headers=_UNAUTHORIZED_HEADERS,
         )
 
     if not user.is_verify:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is not verified",
+            detail=Auth.ACCOUNT_NOT_VERIFIED,
             headers=_UNAUTHORIZED_HEADERS,
         )
     
     if user.role != UserRole.SUPERADMIN and not village_is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Village is inactive",
+            detail=Auth.VILLAGE_INACTIVE,
             headers=_UNAUTHORIZED_HEADERS,
         )
 
@@ -81,7 +82,7 @@ def require_roles(*roles: UserRole):
         if user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
+                detail=Common.INSUFFICIENT_PERMISSIONS,
             )
         return user
 
@@ -94,7 +95,7 @@ def verify_village_scope(user: User, target_village_id: uuid.UUID) -> None:
     if user.village_id != target_village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to access this village's data",
+            detail=Common.VILLAGE_ACCESS_DENIED,
         )
 
 
@@ -121,7 +122,7 @@ async def verify_api_key(
         await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
+            detail=Auth.INVALID_API_KEY,
         )
 
 def get_client_ip(request: Request) -> str:

@@ -5,14 +5,15 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
 import re
+from app.core.error_messages import ValidationErrors
 
 def _validate_password_policy(value: str) -> str:
     if len(value) < 8:
-        raise ValueError("Password must be at least 8 characters long")
+        raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
     if not re.search(r"[A-Za-z]", value):
-        raise ValueError("Password must contain at least one letter")
+        raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
     if not re.search(r"\d", value):
-        raise ValueError("Password must contain at least one digit")
+        raise ValueError(ValidationErrors.SUPERADMIN_NO_VILLAGE)
     return value
 
 class UserCreate(BaseModel):
@@ -37,7 +38,7 @@ class UserCreate(BaseModel):
         if self.role == UserRole.SUPERADMIN and self.village_id is not None:
             raise ValueError("superadmin must not have a village_id")
         if self.role != UserRole.SUPERADMIN and self.village_id is None:
-            raise ValueError("village_id is required for this role")
+            raise ValueError(ValidationErrors.VILLAGE_REQUIRED_FOR_ROLE)
         return self
 
 

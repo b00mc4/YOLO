@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from app.core.connection_limit import InMemoryConnectionLimiter
 from app.core.security import generate_secure_token, hash_token
 from app.models.user import UserRole
+from app.core.error_messages import RealtimeErrors
 
 CLOSE_SENTINEL = object()
 
@@ -88,11 +89,11 @@ class SSEChannel:
     def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None]:
         ticket = self._tickets.pop(hash_token(raw_token), None)
         if ticket is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=RealtimeErrors.INVALID_OR_EXPIRED_TICKET)
 
         user_id, village_id, expire_at = ticket
         if expire_at < datetime.now(timezone.utc):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired ticket")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=RealtimeErrors.INVALID_OR_EXPIRED_TICKET)
 
         return user_id, village_id
 

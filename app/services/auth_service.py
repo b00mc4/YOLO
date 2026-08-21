@@ -22,12 +22,13 @@ from app.models.group import Group
 from app.models.user import User, UserRole
 from app.core.rate_limit import get_rate_limiter
 from app.core.account_lockout import AccountLocked, get_account_locker
+from app.core.error_messages import Auth
 
 settings = get_settings()
 
 REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
 
-_GENERIC_LOGIN_ERROR = "Incorrect username or password"
+_GENERIC_LOGIN_ERROR = Auth.INVALID_CREDENTIALS
 
 _LOGIN_USERNAME_LIMIT = 50
 _LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
@@ -148,13 +149,13 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     stored_token = result.scalar_one_or_none()
 
     if stored_token is None or stored_token.expired_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
     result = await db.execute(select(User).where(User.id == stored_token.user_id))
     user = result.scalar_one_or_none()
 
     if user is None or not user.is_active or not user.is_verify:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
     village_is_active = True
     if user.role != UserRole.SUPERADMIN:
@@ -162,7 +163,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
         village_is_active = bool(village_result.scalar_one_or_none())
 
     if not village_is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
     await db.delete(stored_token)
     access_token, new_raw_refresh_token = await issue_tokens(db, user)
@@ -196,7 +197,7 @@ async def change_password(
     current_raw_refresh_token: str | None,
 ) -> None:
     if current_user.hashpassword is None or not verify_password(current_password, current_user.hashpassword):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
 
     current_user.hashpassword = hash_password(new_password)
 
@@ -283,13 +284,13 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
     verify_entry = result.scalar_one_or_none()
 
     if verify_entry is None or verify_entry.expire_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
 
     result = await db.execute(select(User).where(User.id == verify_entry.user_id))
     user = result.scalar_one_or_none()
 
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
 
     user.hashpassword = hash_password(new_password)
     user.is_verify = True

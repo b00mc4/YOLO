@@ -16,6 +16,7 @@ from app.schemas.common import PaginatedResponse
 from app.services import detection_service
 import logging
 from starlette.datastructures import UploadFile as StarletteUploadFile
+from app.core.error_messages import DetectionErrors
 
 router = APIRouter(prefix="/detections", tags=["detections"])
 
@@ -62,7 +63,7 @@ async def _handle_real_detection(
     if not isinstance(image_crop, StarletteUploadFile) or not isinstance(image_full, StarletteUploadFile):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="image_crop and image_full are required files",
+            detail=DetectionErrors.REQUIRED_FILES_MISSING,
         )
 
     raw_event_id = form.get("event_id")
@@ -111,7 +112,7 @@ async def create_detection(
 
     raise HTTPException(
         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-        detail=f"Unsupported Content-Type: {content_type or 'missing'}",
+        detail=DetectionErrors.unsupported_request_content_type(content_type or 'missing'),
     )
 
 

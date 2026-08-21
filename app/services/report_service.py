@@ -11,6 +11,7 @@ from app.models.user import User, UserRole
 from app.schemas.car import RepeatedPlateEntry
 from app.schemas.report import HourlyBucket, ReportDailyRead, ReportSummaryRead
 from app.core.timezone import BANGKOK_TZ
+from app.core.error_messages import Common
 
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _TOP_PLATES_LIMIT = 5
@@ -53,7 +54,7 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
     if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [Camera.village_id == current_user.village_id]
 

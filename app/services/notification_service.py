@@ -10,6 +10,7 @@ from app.models.notification import Notification
 from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.notification import NotificationRead
+from app.core.error_messages import NotificationErrors
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ async def mark_notification_read(
     )
     notification = result.scalar_one_or_none()
     if notification is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=NotificationErrors.NOT_FOUND)
 
     notification.is_read = True
     await db.commit()

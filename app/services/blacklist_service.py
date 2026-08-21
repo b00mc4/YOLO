@@ -16,6 +16,7 @@ from app.models.user import User, UserRole
 from app.schemas.blacklist import BlacklistCreate, BlacklistRead, BlacklistUpdate
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, village_service, email_service
+from app.core.error_messages import BlacklistErrors, Common
 
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def _resolve_village_id(
         if requested_village_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="village_id is required for superadmin",
+                detail=Common.VILLAGE_ID_REQUIRED_SUPERADMIN,
             )
         await village_service.get_village(db, requested_village_id)
         return requested_village_id
@@ -43,7 +44,7 @@ async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Blacklist:
     result = await db.execute(select(Blacklist).where(Blacklist.id == entry_id))
     entry = result.scalar_one_or_none()
     if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Blacklist entry not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=BlacklistErrors.NOT_FOUND)
     return entry
 
 def _build_blacklist_list_scope_filters(
@@ -57,7 +58,7 @@ def _build_blacklist_list_scope_filters(
     if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [Blacklist.village_id == current_user.village_id]
 
@@ -80,7 +81,7 @@ async def _check_not_whitelisted(
     if result.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This license plate is currently whitelisted in this village",
+            detail=BlacklistErrors.PLATE_IS_WHITELISTED,
         )
 
 

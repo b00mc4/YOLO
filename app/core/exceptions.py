@@ -7,15 +7,16 @@ from sqlalchemy.exc import IntegrityError
 from app.schemas.common import ErrorResponse
 from app.core.rate_limit import RateLimitExceeded
 from app.core.account_lockout import AccountLocked
+from app.core.error_messages import Common
 
 logger = logging.getLogger(__name__)
 
 _SQLSTATE_TO_RESPONSE: dict[str, tuple[int, str]] = {
-    "23505": (status.HTTP_409_CONFLICT, "Resource already exists"),
-    "23503": (status.HTTP_400_BAD_REQUEST, "Referenced resource does not exist"),
-    "23514": (status.HTTP_400_BAD_REQUEST, "Data violates a database constraint"),
+    "23505": (status.HTTP_409_CONFLICT, Common.RESOURCE_ALREADY_EXISTS),
+    "23503": (status.HTTP_400_BAD_REQUEST, Common.REFERENCED_RESOURCE_NOT_FOUND),
+    "23514": (status.HTTP_400_BAD_REQUEST, Common.CONSTRAINT_VIOLATION),
 }
-_DEFAULT_INTEGRITY_RESPONSE = (status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
+_DEFAULT_INTEGRITY_RESPONSE = (status.HTTP_500_INTERNAL_SERVER_ERROR, Common.INTERNAL_SERVER_ERROR)
 
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
@@ -35,7 +36,7 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     retry_after = int(exc.retry_after_seconds) + 1
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        content=ErrorResponse(detail="Too many requests, please try again later").model_dump(),
+        content=ErrorResponse(detail=Common.TOO_MANY_REQUESTS).model_dump(),
         headers={"Retry-After": str(retry_after)},
     )
 
@@ -68,7 +69,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(detail="Internal server error").model_dump(),
+        content=ErrorResponse(detail=Common.INTERNAL_SERVER_ERROR).model_dump(),
     )
 
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.contact import ContactType
 from app.models.user import UserRole
-
+from app.core.error_messages import ContactErrors
 
 def _normalize_content_type(value):
     if isinstance(value, str):
@@ -37,9 +37,9 @@ class ContactCreate(BaseModel):
     def check_custom_label_matches_content_type(self) -> ContactCreate:
         if self.content_type == ContactType.OTHER:
             if not self.custom_label:
-                raise ValueError("custom_label is required when content_type is 'other'")
+                raise ValueError(ContactErrors.CUSTOM_LABEL_REQUIRED)
         elif self.custom_label is not None:
-            raise ValueError("custom_label must not be set unless content_type is 'other'")
+            raise ValueError(ContactErrors.CUSTOM_LABEL_NOT_ALLOWED)
         return self
 
 

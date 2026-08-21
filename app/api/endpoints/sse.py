@@ -13,6 +13,7 @@ from app.models.user import User, UserRole
 from app.schemas.presence import PresenceTicketResponse
 from app.schemas.sse import SSETicketResponse
 from app.services import channel_service, presence_service, session_validation_service
+from app.core.error_messages import RealtimeErrors
 
 router = APIRouter(prefix="/sse", tags=["sse"])
 
@@ -26,7 +27,7 @@ _PING_INTERVAL_SECONDS = 15
 def _connection_limit_exceeded_response(exc: ConnectionLimitExceeded) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail=f"Too many concurrent connections for this account (max {exc.max_connections})",
+        detail=RealtimeErrors.too_many_connections(exc.max_connections),
     )
 
 

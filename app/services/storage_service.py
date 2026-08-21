@@ -8,6 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError
 from app.core.config import get_settings
+from app.core.error_messages import StorageErrors
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def validate_image_content_type(upload: UploadFile) -> None:
     if upload.content_type not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported image content type: {upload.content_type}",
+            detail=StorageErrors.unsupported_image_content_type(upload.content_type),
         )
 
 async def _read_with_size_limit(upload: UploadFile) -> bytes:
@@ -48,7 +49,7 @@ async def _read_with_size_limit(upload: UploadFile) -> bytes:
         if total_size > _MAX_IMAGE_SIZE_BYTES:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"Image exceeds maximum size of {_MAX_IMAGE_SIZE_BYTES // (1024 * 1024)}MB",
+                detail=StorageErrors.image_too_large(_MAX_IMAGE_SIZE_BYTES // (1024 * 1024)),
             )
         chunks.append(chunk)
 
@@ -62,14 +63,14 @@ def _detect_image_extension(content: bytes) -> str:
     except (UnidentifiedImageError, DecompressionBombError, OSError, SyntaxError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or corrupted image file",
+            detail=StorageErrors.INVALID_IMAGE,
         )
  
     extension = _ALLOWED_PILLOW_FORMATS.get(detected_format)
     if extension is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported image format: {detected_format}",
+            detail=StorageErrors.unsupported_format(detected_format),
         )
  
     return extension

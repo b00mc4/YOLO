@@ -10,6 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.whitelist import WhitelistCreate, WhitelistRead, WhitelistUpdate
 from app.services import audit_service, village_service
+from app.core.error_messages import Common, WhitelistErrors
 
 
 async def _resolve_village_id(
@@ -21,7 +22,7 @@ async def _resolve_village_id(
         if requested_village_id is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="village_id is required for superadmin",
+                detail=Common.VILLAGE_ID_REQUIRED_SUPERADMIN,
             )
         await village_service.get_village(db, requested_village_id)
         return requested_village_id
@@ -32,7 +33,7 @@ async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Whitelist:
     result = await db.execute(select(Whitelist).where(Whitelist.id == entry_id))
     entry = result.scalar_one_or_none()
     if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Whitelist entry not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=WhitelistErrors.NOT_FOUND)
     return entry
 
 
@@ -47,7 +48,7 @@ def _build_whitelist_list_scope_filters(
     if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not allowed to specify village_id for this role",
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
     return [Whitelist.village_id == current_user.village_id]
 
@@ -70,7 +71,7 @@ async def _check_not_blacklisted(
     if result.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This license plate is currently blacklisted in this village",
+            detail=WhitelistErrors.PLATE_IS_BLACKLISTED,
         )
 
 
