@@ -2,27 +2,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from app.models.whitelist import WhitelistCategory
-
-
-def _normalize_category(value):
-    if isinstance(value, str):
-        return value.strip().lower()
-    return value
 
 
 class WhitelistCreate(BaseModel):
     village_id: uuid.UUID | None = None
-    category: WhitelistCategory
     name: str = Field(max_length=255)
+    house_no: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=20)
     license_plate: str = Field(max_length=255)
     province: str = Field(max_length=255)
+    color: str | None = Field(default=None, max_length=255)
     note: str | None = Field(default=None, max_length=255)
-
-    @field_validator("category", mode="before")
-    @classmethod
-    def normalize_category(cls, v):
-        return _normalize_category(v)
 
     @field_validator("name")
     @classmethod
@@ -34,23 +24,20 @@ class WhitelistCreate(BaseModel):
     def normalize(cls, v: str) -> str:
         return v.strip().upper()
 
-    @field_validator("note")
+    @field_validator("house_no", "phone", "color", "note")
     @classmethod
-    def normalize_note(cls, v: str | None) -> str | None:
+    def normalize_optional(cls, v: str | None) -> str | None:
         return v.strip() if v is not None else v
 
 
 class WhitelistUpdate(BaseModel):
-    category: WhitelistCategory | None = None
     name: str | None = Field(default=None, max_length=255)
+    house_no: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=20)
     license_plate: str | None = Field(default=None, max_length=255)
     province: str | None = Field(default=None, max_length=255)
+    color: str | None = Field(default=None, max_length=255)
     note: str | None = Field(default=None, max_length=255)
-
-    @field_validator("category", mode="before")
-    @classmethod
-    def normalize_category(cls, v):
-        return _normalize_category(v)
 
     @field_validator("name")
     @classmethod
@@ -62,9 +49,9 @@ class WhitelistUpdate(BaseModel):
     def normalize(cls, v: str | None) -> str | None:
         return v.strip().upper() if v is not None else v
 
-    @field_validator("note")
+    @field_validator("house_no", "phone", "color", "note")
     @classmethod
-    def normalize_note(cls, v: str | None) -> str | None:
+    def normalize_optional(cls, v: str | None) -> str | None:
         return v.strip() if v is not None else v
 
 
@@ -73,10 +60,12 @@ class WhitelistRead(BaseModel):
 
     id: uuid.UUID
     village_id: uuid.UUID
-    category: WhitelistCategory
     name: str
+    house_no: str | None
+    phone: str | None
     license_plate: str
     province: str
+    color: str | None
     note: str | None
     added_by: uuid.UUID | None
     created_at: datetime
