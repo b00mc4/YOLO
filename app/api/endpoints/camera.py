@@ -13,9 +13,11 @@ from app.schemas.camera import (
     CameraStatusRead,
     CameraUpdate,
     CameraVerificationCheckRead,
+    OnvifProbeRequest,
+    OnvifProbeResponse,
 )
 from app.schemas.common import MessageResponse, PaginatedResponse
-from app.services import camera_service
+from app.services import camera_service, onvif_service
 
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
@@ -118,3 +120,12 @@ async def delete_camera(
 ):
     await camera_service.delete_camera(db, request, background_tasks, current_user, camera_id)
     return MessageResponse(detail="Camera permanently deleted")
+
+@router.post("/onvif/probe", response_model=OnvifProbeResponse)
+async def probe_onvif_camera(
+    payload: OnvifProbeRequest,
+    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
+):
+    return await onvif_service.probe_camera(
+        payload.host, payload.port, payload.username, payload.password
+    )

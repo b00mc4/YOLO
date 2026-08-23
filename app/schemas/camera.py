@@ -80,3 +80,24 @@ class CameraVerificationCheckRead(BaseModel):
     polling_restarted: bool
     anomaly_detected: bool
     note: str | None
+
+class OnvifProbeRequest(BaseModel):
+    host: str = Field(max_length=255)
+    port: int = Field(ge=1, le=65535)
+    username: str = Field(max_length=255)
+    password: str = Field(max_length=255)
+
+
+class OnvifProfileRead(BaseModel):
+    profile_token: str
+    name: str
+    encoding: str | None
+    width: int | None
+    height: int | None
+    rtsp_uri: str
+
+
+class OnvifProbeResponse(BaseModel):
+    device_manufacturer: str | None
+    device_model: str | None
+    profiles: list[OnvifProfileRead]

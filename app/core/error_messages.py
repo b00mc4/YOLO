@@ -140,3 +140,9 @@ class DetectionErrors:
     @staticmethod
     def date_range_too_wide(max_days: int) -> str:
         return f"ช่วงวันที่ต้องไม่เกิน {max_days} วัน"
+
+class OnvifErrors:
+    CONNECTION_FAILED = "ไม่สามารถเชื่อมต่อกล้องได้ กรุณาตรวจสอบ IP และพอร์ต"
+    INVALID_CREDENTIALS = "ชื่อผู้ใช้หรือรหัสผ่านของกล้องไม่ถูกต้อง"
+    NO_MEDIA_PROFILES = "ไม่พบ media profile บนกล้องนี้"
+    UNSUPPORTED_OR_UNREACHABLE = "กล้องนี้ไม่รองรับ ONVIF หรือมีปัญหาในการเชื่อมต่อ"
