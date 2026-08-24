@@ -101,3 +101,15 @@ class OnvifProbeResponse(BaseModel):
     device_manufacturer: str | None
     device_model: str | None
     profiles: list[OnvifProfileRead]
+
+class CameraStatusRead(BaseModel):
+    id: uuid.UUID
+    is_active: bool
+    verification_status: CameraVerificationStatus
+    stream_online: bool | None
+
+
+class CameraStreamTokenRead(BaseModel):
+    camera_id: uuid.UUID
+    stream_url: str
+    expires_at: datetime

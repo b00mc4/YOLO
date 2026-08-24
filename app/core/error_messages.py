@@ -146,3 +146,10 @@ class OnvifErrors:
     INVALID_CREDENTIALS = "ชื่อผู้ใช้หรือรหัสผ่านของกล้องไม่ถูกต้อง"
     NO_MEDIA_PROFILES = "ไม่พบ media profile บนกล้องนี้"
     UNSUPPORTED_OR_UNREACHABLE = "กล้องนี้ไม่รองรับ ONVIF หรือมีปัญหาในการเชื่อมต่อ"
+
+class CameraErrors:
+    NOT_FOUND = "ไม่พบกล้อง"
+    DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
+    DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
+    SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
+    STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"

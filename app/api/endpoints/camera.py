@@ -11,6 +11,7 @@ from app.schemas.camera import (
     CameraRead,
     CameraResyncAllRead,
     CameraStatusRead,
+    CameraStreamTokenRead,
     CameraUpdate,
     CameraVerificationCheckRead,
     OnvifProbeRequest,
@@ -77,6 +78,14 @@ async def get_camera_status(
 ):
     return await camera_service.get_camera_status(db, current_user, camera_id)
 
+
+@router.get("/{camera_id}/stream-token", response_model=CameraStreamTokenRead)
+async def get_camera_stream_token(
+    camera_id: uuid.UUID,
+    current_user: User = Depends(require_roles(*_READ_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    return await camera_service.get_camera_stream_token(db, current_user, camera_id)
 
 @router.patch("/{camera_id}", response_model=CameraRead)
 async def update_camera(

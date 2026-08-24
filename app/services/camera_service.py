@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from app.schemas.camera import (
     CameraResyncAllRead,
     CameraResyncFailedEntry,
     CameraStatusRead,
+    CameraStreamTokenRead,
     CameraUpdate,
     CameraVerificationCheckRead,
 )
@@ -265,6 +267,39 @@ async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uui
         is_active=camera.is_active,
         verification_status=camera.verification_status,
         stream_online=stream_online,
+    )
+
+async def get_camera_stream_token(
+    db: AsyncSession,
+    current_user: User,
+    camera_id: uuid.UUID,
+) -> CameraStreamTokenRead:
+    result = await db.execute(
+        select(Camera.village_id, Camera.is_active).where(Camera.id == camera_id)
+    )
+    row = result.one_or_none()
+
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CameraErrors.NOT_FOUND)
+
+    village_id, is_active = row
+    verify_village_scope(current_user, village_id)
+
+    if not is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CameraErrors.STREAM_UNAVAILABLE_INACTIVE,
+        )
+
+    stream_url = mediamtx_service.derive_stream_url(camera_id)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=settings.mediamtx_stream_token_expire_seconds
+    )
+
+    return CameraStreamTokenRead(
+        camera_id=camera_id,
+        stream_url=stream_url,
+        expires_at=expires_at,
     )
 
 async def list_cameras(
