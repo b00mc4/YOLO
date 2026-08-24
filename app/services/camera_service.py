@@ -258,7 +258,7 @@ async def get_camera_detail(db: AsyncSession, current_user: User, camera_id: uui
 
 async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> CameraStatusRead:
     camera = await get_camera(db, current_user, camera_id)
-    stream_online = await mediamtx_service.get_path_status(camera.id)
+    stream_online = await mediamtx_service.check_source_alive(camera.id)
 
     return CameraStatusRead(
         id=camera.id,

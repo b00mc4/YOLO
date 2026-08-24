@@ -7,8 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class WhitelistCreate(BaseModel):
     village_id: uuid.UUID | None = None
     name: str = Field(max_length=255)
-    house_no: str | None = Field(default=None, max_length=255)
-    phone: str | None = Field(default=None, max_length=20)
+    house_no: str = Field(default=None, max_length=255)
+    phone: str = Field(default=None, max_length=20)
     license_plate: str = Field(max_length=255)
     province: str = Field(max_length=255)
     color: str | None = Field(default=None, max_length=255)
