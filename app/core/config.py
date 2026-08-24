@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     ai_vision_api_url: str
     ai_vision_api_key: str
 
+    mediamtx_jwt_private_key_b64: str
+    mediamtx_stream_token_expire_seconds: int = Field(default=300, ge=60, le=3600)
+
     @model_validator(mode="after")
     def check_cookie_security(self) -> "Settings":
         if self.cookie_samesite == "none" and not self.cookie_secure:

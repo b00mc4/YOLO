@@ -180,28 +180,6 @@ async def get_today_dashboard(
 ):
     return await detection_service.get_today_dashboard(db, request, current_user, village_id, latest_limit)
 
-@router.get("/{detection_id}", response_model=CarDetailRead)
-async def get_detection_detail(
-    detection_id: uuid.UUID,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await detection_service.get_detection_detail(db, request, current_user, detection_id)
-
-
-@router.get("/{detection_id}/image/{variant}", name="get_detection_image")
-async def get_detection_image(
-    detection_id: uuid.UUID,
-    variant: Literal["crop", "full"],
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    file_path, media_type = await detection_service.get_detection_image_path(
-        db, current_user, detection_id, variant
-    )
-    return FileResponse(file_path, media_type=media_type)
-
 @router.get("/route-tracking", response_model=RouteTrackingRead)
 async def get_route_tracking(
     request: Request,
@@ -231,3 +209,25 @@ async def get_route_tracking(
         page,
         page_size,
     )
+
+@router.get("/{detection_id}", response_model=CarDetailRead)
+async def get_detection_detail(
+    detection_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await detection_service.get_detection_detail(db, request, current_user, detection_id)
+
+
+@router.get("/{detection_id}/image/{variant}", name="get_detection_image")
+async def get_detection_image(
+    detection_id: uuid.UUID,
+    variant: Literal["crop", "full"],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    file_path, media_type = await detection_service.get_detection_image_path(
+        db, current_user, detection_id, variant
+    )
+    return FileResponse(file_path, media_type=media_type)

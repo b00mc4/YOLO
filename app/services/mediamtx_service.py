@@ -3,6 +3,7 @@ import logging
 import uuid
 import httpx
 from app.core.config import get_settings
+from app.services import mediamtx_auth_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -19,7 +20,8 @@ def _path_name(camera_id: uuid.UUID) -> str:
 
 
 def derive_stream_url(camera_id: uuid.UUID) -> str:
-    return f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8"
+    token = mediamtx_auth_service.issue_stream_token(camera_id)
+    return f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8?jwt={token}"
 
 
 async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:

@@ -3,6 +3,7 @@ import asyncio
 import logging
 from fastapi import HTTPException, status
 from onvif import ONVIFCamera
+from yarl import URL
 from zeep.exceptions import Fault, TransportError
 from app.core.error_messages import OnvifErrors
 
@@ -45,31 +46,48 @@ def _build_profile_entry(profile, rtsp_uri: str) -> dict:
     }
 
 
+def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
+    if not username:
+        return rtsp_uri
+    return str(URL(rtsp_uri).with_user(username).with_password(password))
+
+
 async def _probe(host: str, port: int, username: str, password: str) -> dict:
     camera = ONVIFCamera(host, port, username, password)
-    await camera.update_xaddrs()
 
-    manufacturer, model = await _fetch_device_info(camera)
+    try:
+        await camera.update_xaddrs()
 
-    media_service = await camera.create_media_service()
-    profiles = await media_service.GetProfiles()
+        manufacturer, model = await _fetch_device_info(camera)
 
-    if not profiles:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=OnvifErrors.NO_MEDIA_PROFILES,
-        )
+        media_service = await camera.create_media_service()
+        profiles = await media_service.GetProfiles()
 
-    profile_results = []
-    for profile in profiles:
-        rtsp_uri = await _fetch_stream_uri(media_service, profile.token)
-        profile_results.append(_build_profile_entry(profile, rtsp_uri))
+        if not profiles:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=OnvifErrors.NO_MEDIA_PROFILES,
+            )
 
-    return {
-        "device_manufacturer": manufacturer,
-        "device_model": model,
-        "profiles": profile_results,
-    }
+        profile_results = []
+        for profile in profiles:
+            rtsp_uri = await _fetch_stream_uri(media_service, profile.token)
+            rtsp_uri = _with_rtsp_credentials(rtsp_uri, username, password)
+            profile_results.append(_build_profile_entry(profile, rtsp_uri))
+
+        return {
+            "device_manufacturer": manufacturer,
+            "device_model": model,
+            "profiles": profile_results,
+        }
+    finally:
+        try:
+            await camera.close()
+        except Exception:
+            logger.warning(
+                "onvif probe failed to close camera session cleanly for host=%s port=%s",
+                host, port,
+            )
 
 
 async def probe_camera(host: str, port: int, username: str, password: str) -> dict:
