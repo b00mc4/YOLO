@@ -29,7 +29,7 @@ class Camera(Base):
     name = Column(String(255), nullable=False)
     lat = Column(Float(53), nullable=False)
     long = Column(Float(53), nullable=False)
-    stream_ai = Column(String(255), nullable=False)
+    stream_ai = Column(String(1000), nullable=False)
     direction = Column(
         SAEnum(
             CameraDirection,

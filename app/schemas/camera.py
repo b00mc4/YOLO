@@ -10,7 +10,7 @@ class CameraCreate(BaseModel):
     name: str = Field(max_length=255)
     lat: float = Field(ge=-90, le=90)
     long: float = Field(ge=-180, le=180)
-    stream_ai: str = Field(max_length=255)
+    stream_ai: str = Field(max_length=1000)
     direction: CameraDirection
 
 
