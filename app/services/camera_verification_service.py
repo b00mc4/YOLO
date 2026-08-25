@@ -13,7 +13,7 @@ from app.services.ai_vision_service import VerificationCheckResult
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL_SECONDS = 60.0
+_POLL_INTERVAL_SECONDS = 10.0
 _MAX_VERIFY_DURATION_SECONDS = 5 * 60.0
 
 _verification_tasks: dict[uuid.UUID, asyncio.Task] = {}
@@ -66,11 +66,7 @@ async def _run_verification_loop(camera_id: uuid.UUID) -> None:
                 return
 
             if monotonic() >= deadline:
-                await _finalize(
-                    camera_id,
-                    verified=False,
-                    reason="timed out waiting for ai vision service to confirm verification",
-                )
+                await _handle_verification_timeout(camera_id)
                 return
     except asyncio.CancelledError:
         raise
@@ -142,6 +138,52 @@ async def _finalize(
     await channel_service.alerts.publish(village_id, event, payload)
     await channel_service.alerts.publish_global(event, {**payload, "village_id": str(village_id)})
 
+async def _handle_verification_timeout(camera_id: uuid.UUID) -> None:
+    async with async_session_maker() as db:
+        result = await db.execute(select(Camera).where(Camera.id == camera_id))
+        camera = result.scalar_one_or_none()
+        if camera is None:
+            return
+
+        if camera.verification_status != CameraVerificationStatus.PENDING:
+            return
+
+        action = "camera_verification_timeout"
+        detail = (
+            f"camera verification timed out for '{camera.name}': "
+            "no confirmation from ai vision service within the poll window; "
+            "status remains pending, manual verification-check recommended"
+        )
+
+        await audit_service.log_action(
+            db,
+            request=None,
+            action=action,
+            detail=detail,
+            village_id=camera.village_id,
+        )
+        await notification_service.notify_village(db, camera.village_id, action, detail)
+        await notification_service.notify_superadmins(db, action, detail)
+        await db.commit()
+
+        village_id = camera.village_id
+        camera_id_value = camera.id
+        camera_name = camera.name
+        is_active = camera.is_active
+        verification_status = camera.verification_status
+
+    from app.services import channel_service
+
+    payload = {
+        "camera_id": str(camera_id_value),
+        "camera_name": camera_name,
+        "verification_status": verification_status.value,
+        "is_active": is_active,
+    }
+    await channel_service.alerts.publish(village_id, "camera_verification_timeout", payload)
+    await channel_service.alerts.publish_global(
+        "camera_verification_timeout", {**payload, "village_id": str(village_id)}
+    )
 
 async def finalize_verification(
     camera_id: uuid.UUID,
