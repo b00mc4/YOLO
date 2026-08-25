@@ -660,7 +660,6 @@ async def get_camera_live_view(
         camera_id=camera.id,
         camera_name=camera.name,
         is_active=camera.is_active,
-        stream_url=mediamtx_service.derive_stream_url(camera.id),
         latest_captures=latest_captures,
     )
 

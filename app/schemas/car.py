@@ -133,7 +133,6 @@ class CameraLiveRead(BaseModel):
     camera_id: uuid.UUID
     camera_name: str
     is_active: bool
-    stream_url: str
     latest_captures: list[LiveCaptureEntry]
 
 class DetectionCreateAck(BaseModel):

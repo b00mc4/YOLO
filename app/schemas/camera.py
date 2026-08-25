@@ -33,7 +33,6 @@ class CameraRead(BaseModel):
     long: float
     stream_ai: str
     direction: CameraDirection | None
-    stream_url: str
     webhook_url: str
     verification_status: CameraVerificationStatus
     ai_vision_synced_at: datetime | None

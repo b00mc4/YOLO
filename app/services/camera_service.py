@@ -86,7 +86,6 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         long=camera.long,
         stream_ai=camera.stream_ai,
         direction=camera.direction,
-        stream_url=mediamtx_service.derive_stream_url(camera.id),
         webhook_url=ai_vision_service.derive_webhook_url(),
         verification_status=camera.verification_status,
         ai_vision_synced_at=camera.ai_vision_synced_at,
@@ -429,7 +428,7 @@ async def delete_camera(
     if camera.ai_vision_synced_at is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(CameraErrors.DELETE_ALREADY_LINKE),
+            detail=(CameraErrors.DELETE_ALREADY_LINKED),
         )
 
     camera_id_value = camera.id
