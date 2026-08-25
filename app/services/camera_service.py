@@ -145,19 +145,10 @@ async def _sync_camera_create(
 
 
 async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
-    mediamtx_ok, ai_vision_ok = await asyncio.gather(
-        mediamtx_service.remove_path(camera_id),
-        ai_vision_service.notify_camera_deleted(camera_id),
-    )
+    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
 
-    failed_services = []
     if not mediamtx_ok:
-        failed_services.append("mediamtx")
-    if not ai_vision_ok:
-        failed_services.append("ai_vision")
-
-    if failed_services:
-        await _notify_sync_failure(village_id, camera_id, camera_name, failed_services)
+        await _notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
 
 
 async def _sync_camera_update(
