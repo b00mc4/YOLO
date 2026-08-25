@@ -45,6 +45,11 @@ async def push_camera_config(camera_id: uuid.UUID, stream_ai: str) -> bool:
         )
         return False
 
+    logger.info(
+    "ai vision push_camera_config succeeded for %s: status=%s body=%s",
+    camera_id, response.status_code, response.text,
+)
+
     return True
 
 

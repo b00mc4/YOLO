@@ -18,7 +18,6 @@ class CameraUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     lat: float | None = Field(default=None, ge=-90, le=90)
     long: float | None = Field(default=None, ge=-180, le=180)
-    stream_ai: str | None = Field(default=None, max_length=255)
     direction: CameraDirection | None = None
     is_active: bool | None = None
 

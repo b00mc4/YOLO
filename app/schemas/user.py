@@ -2,19 +2,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+from app.core.security import validate_password_policy
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
-import re
-from app.core.error_messages import ValidationErrors
-
-def _validate_password_policy(value: str) -> str:
-    if len(value) < 8:
-        raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
-    if not re.search(r"[A-Za-z]", value):
-        raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
-    if not re.search(r"\d", value):
-        raise ValueError(ValidationErrors.SUPERADMIN_NO_VILLAGE)
-    return value
 
 class UserCreate(BaseModel):
     username: str = Field(max_length=255)
@@ -53,13 +43,7 @@ class AdminResetPasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        return _validate_password_policy(v)
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> AdminResetPasswordRequest:
-        if self.new_password != self.confirm_new_password:
-            raise ValueError("New password and confirm password do not match")
-        return self
+        return validate_password_policy(v)
 
 
 class AdminResetPasswordResponse(BaseModel):

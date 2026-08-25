@@ -1,6 +1,6 @@
 from __future__ import annotations
-import re
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from app.core.security import validate_password_policy
 from app.schemas.user import UserRead
 from app.core.error_messages import ValidationErrors
 
@@ -11,15 +11,6 @@ class TokenResponse(BaseModel):
 class LoginResponse(TokenResponse):
     user: UserRead
 
-def _validate_password_policy(value: str) -> str:
-    if len(value) < 8:
-        raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
-    if not re.search(r"[A-Za-z]", value):
-        raise ValueError(ValidationErrors.PASSWORD_NEED_LETTER)
-    if not re.search(r"\d", value):
-        raise ValueError(ValidationErrors.PASSWORD_NEED_DIGIT)
-    return value
-
 class SetPasswordRequest(BaseModel):
     token: str = Field(max_length=512)
     new_password: str = Field(max_length=128)
@@ -28,13 +19,7 @@ class SetPasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        return _validate_password_policy(v)
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> SetPasswordRequest:
-        if self.new_password != self.confirm_new_password:
-            raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
-        return self
+        return validate_password_policy(v)
 
 class SetPasswordResponse(BaseModel):
     detail: str
@@ -52,7 +37,7 @@ class ChangePasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        return _validate_password_policy(v)
+        return validate_password_policy(v)
 
     @model_validator(mode="after")
     def check_passwords_match(self) -> ChangePasswordRequest:

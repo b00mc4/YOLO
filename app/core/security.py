@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHash, VerificationError
-
+import re
+from app.core.error_messages import ValidationErrors
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -45,3 +46,12 @@ def generate_secure_token():
 
 def hash_token(raw_token: str):
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+def validate_password_policy(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
+    if not re.search(r"[A-Za-z]", value):
+        raise ValueError(ValidationErrors.PASSWORD_NEED_LETTER)
+    if not re.search(r"\d", value):
+        raise ValueError(ValidationErrors.PASSWORD_NEED_DIGIT)
+    return value
