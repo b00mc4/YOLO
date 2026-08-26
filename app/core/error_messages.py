@@ -33,7 +33,7 @@ class UserErrors:
     CANNOT_RESET_OWN_PASSWORD = "ไม่สามารถรีเซ็ตรหัสผ่านของตัวเองที่นี่ได้ กรุณาใช้ฟังก์ชันเปลี่ยนรหัสผ่านแทน"
     CANNOT_RESET_SUPERADMIN_PASSWORD = "ไม่สามารถรีเซ็ตรหัสผ่านของ superadmin คนอื่นได้"
     SCOPE_PASSWORD_RESET_DENIED = "ไม่มีสิทธิ์รีเซ็ตรหัสผ่านของผู้ใช้งานนี้"
-    CANNOT_CREATE_SUPERADMIN = "ไม่มีสิทธิ์สร้างบัญชี superadmin"
+    CANNOT_CREATE_ADMIN_OR_SUPERADMIN = "เฉพาะ superadmin เท่านั้นที่สามารถสร้างบัญชี admin หรือ superadmin ได้"
     PASSWORD_NOT_SET_YET = "บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน กรุณาใช้ฟังก์ชันส่งคำเชิญอีกครั้งแทน"
     ALREADY_VERIFIED = "ผู้ใช้งานนี้ยืนยันตัวตนแล้ว"
     RESEND_INVITE_COOLDOWN = "กรุณารอสักครู่ก่อนขอส่งคำเชิญอีกครั้ง"

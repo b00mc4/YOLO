@@ -3,17 +3,18 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 from app.core.security import validate_password_policy
+from app.core.error_messages import ValidationErrors
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
 
 class UserCreate(BaseModel):
-    username: str = Field(max_length=255)
+    username: str = Field(min_length=3, max_length=36)
     fullname: str = Field(max_length=255)
     email: EmailStr = Field(max_length=255)
     role: UserRole
     village_id: uuid.UUID | None = None
 
-    @field_validator("username")
+    @field_validator("username", mode="before")
     @classmethod
     def normalize_username(cls, v: str) -> str:
         return v.strip().lower()
@@ -26,7 +27,7 @@ class UserCreate(BaseModel):
     @model_validator(mode="after")
     def check_village_matches_role(self) -> UserCreate:
         if self.role == UserRole.SUPERADMIN and self.village_id is not None:
-            raise ValueError("superadmin must not have a village_id")
+            raise ValueError(ValidationErrors.SUPERADMIN_NO_VILLAGE)
         if self.role != UserRole.SUPERADMIN and self.village_id is None:
             raise ValueError(ValidationErrors.VILLAGE_REQUIRED_FOR_ROLE)
         return self

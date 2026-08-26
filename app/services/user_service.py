@@ -175,10 +175,10 @@ async def create_user(
     payload: UserCreate,
 ) -> UserRegister:
     if current_user.role == UserRole.ADMIN:
-        if payload.role == UserRole.SUPERADMIN:
+        if payload.role != UserRole.USER:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=UserErrors.CANNOT_CREATE_SUPERADMIN,
+                detail=UserErrors.CANNOT_CREATE_ADMIN_OR_SUPERADMIN,
             )
         village_id = current_user.village_id
     else:
