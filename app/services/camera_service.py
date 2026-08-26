@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import BackgroundTasks, HTTPException, Request, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.core.config import get_settings
@@ -35,6 +36,8 @@ logger = logging.getLogger(__name__)
 _RESYNC_CONCURRENCY_LIMIT = 10
 _MANUAL_VERIFY_RATE_LIMIT = 1
 _MANUAL_VERIFY_RATE_WINDOW_SECONDS = 30.0
+_UNIQUE_VIOLATION_SQLSTATE = "23505"
+_STREAM_AI_UNIQUE_CONSTRAINT_NAME = "uq_CameraTABLE_stream_ai"
 
 
 async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
@@ -170,6 +173,18 @@ async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=VillageErrors.NOT_FOUND)
     return village
 
+
+async def _ensure_stream_ai_unique(db: AsyncSession, stream_ai: str) -> None:
+    result = await db.execute(
+        select(Camera.id).where(Camera.stream_ai == stream_ai).limit(1)
+    )
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CameraErrors.STREAM_AI_ALREADY_EXISTS,
+        )
+
+
 async def create_camera(
     db: AsyncSession,
     request: Request,
@@ -182,6 +197,8 @@ async def create_camera(
     else:
         village_id = payload.village_id
     village = await _get_village_or_404(db, village_id)
+
+    await _ensure_stream_ai_unique(db, payload.stream_ai)
 
     camera = Camera(
         village_id=village_id,
@@ -204,7 +221,20 @@ async def create_camera(
         user_id=current_user.id,
         village_id=village_id,
     )
-    await db.commit()
+
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        constraint_name = getattr(exc.orig, "constraint_name", None)
+        sqlstate = getattr(exc.orig, "sqlstate", None)
+        if sqlstate == _UNIQUE_VIOLATION_SQLSTATE and constraint_name == _STREAM_AI_UNIQUE_CONSTRAINT_NAME:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=CameraErrors.STREAM_AI_ALREADY_EXISTS,
+            )
+        raise
+
     await db.refresh(camera)
 
     if village.is_active:
@@ -658,15 +688,15 @@ async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
             select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))
         )
         cameras = list(result.scalars().all())
- 
+
     if not cameras:
         return
- 
+
     semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
     outcomes = await asyncio.gather(
         *(_deactivate_camera_guarded(semaphore, camera) for camera in cameras)
     )
- 
+
     for camera, failed_services in outcomes:
         if failed_services:
             await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
@@ -685,15 +715,15 @@ async def activate_village_cameras(village_id: uuid.UUID) -> None:
             select(Camera).where(Camera.village_id == village_id, Camera.is_active.is_(True))
         )
         cameras = list(result.scalars().all())
- 
+
     if not cameras:
         return
- 
+
     semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
     outcomes = await asyncio.gather(
         *(_activate_camera_guarded(semaphore, camera) for camera in cameras)
     )
- 
+
     verifying_camera_ids = [camera.id for camera, should_verify, _ in outcomes if should_verify]
     if verifying_camera_ids:
         async with async_session_maker() as db:
@@ -703,7 +733,7 @@ async def activate_village_cameras(village_id: uuid.UUID) -> None:
             await db.commit()
         for camera_id in verifying_camera_ids:
             camera_verification_service.start_verification(camera_id)
- 
+
     for camera, _, failed_services in outcomes:
         if failed_services:
             await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))

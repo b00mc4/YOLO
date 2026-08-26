@@ -43,13 +43,6 @@ class VillageErrors:
     NOT_FOUND = "ไม่พบหมู่บ้าน"
 
 
-class CameraErrors:
-    NOT_FOUND = "ไม่พบกล้อง"
-    DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
-    DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
-    SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
-
-
 class ContactErrors:
     NOT_FOUND = "ไม่พบข้อมูลผู้ติดต่อ"
     SCOPE_ADMIN_ONLY_USER = "เฉพาะ superadmin เท่านั้นที่สามารถจัดการผู้ติดต่อของ admin หรือ superadmin ได้"
@@ -72,19 +65,6 @@ class BlacklistErrors:
 class WhitelistErrors:
     NOT_FOUND = "ไม่พบรายการในบัญชีขาว"
     PLATE_IS_BLACKLISTED = "ทะเบียนนี้อยู่ในบัญชีดำของหมู่บ้านนี้อยู่แล้ว"
-
-
-class DetectionErrors:
-    NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
-    IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
-    CAMERA_VILLAGE_INACTIVE = "หมู่บ้านของกล้องนี้ถูกระงับการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
-    CAMERA_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
-    STORE_IMAGE_FAILED = "บันทึกรูปภาพการตรวจจับไม่สำเร็จ"
-    REQUIRED_FILES_MISSING = "ต้องแนบไฟล์ image_crop และ image_full"
-
-    @staticmethod
-    def unsupported_request_content_type(content_type: str) -> str:
-        return f"ไม่รองรับ Content-Type: {content_type}"
 
 
 class StorageErrors:
@@ -123,6 +103,7 @@ class ValidationErrors:
     SUPERADMIN_NO_VILLAGE = "superadmin ต้องไม่มี village_id"
     VILLAGE_REQUIRED_FOR_ROLE = "ต้องระบุ village_id สำหรับสิทธิ์การใช้งานนี้"
 
+
 class DetectionErrors:
     NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
     IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
@@ -141,11 +122,13 @@ class DetectionErrors:
     def date_range_too_wide(max_days: int) -> str:
         return f"ช่วงวันที่ต้องไม่เกิน {max_days} วัน"
 
+
 class OnvifErrors:
     CONNECTION_FAILED = "ไม่สามารถเชื่อมต่อกล้องได้ กรุณาตรวจสอบ IP และพอร์ต"
     INVALID_CREDENTIALS = "ชื่อผู้ใช้หรือรหัสผ่านของกล้องไม่ถูกต้อง"
     NO_MEDIA_PROFILES = "ไม่พบ media profile บนกล้องนี้"
     UNSUPPORTED_OR_UNREACHABLE = "กล้องนี้ไม่รองรับ ONVIF หรือมีปัญหาในการเชื่อมต่อ"
+
 
 class CameraErrors:
     NOT_FOUND = "ไม่พบกล้อง"
@@ -153,3 +136,5 @@ class CameraErrors:
     DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
     SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
     STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"
+    INVALID_RTSP_FORMAT = "รูปแบบลิงก์กล้องไม่ถูกต้อง ต้องเป็น rtsp:// หรือ rtsps:// และต้องระบุ host"
+    STREAM_AI_ALREADY_EXISTS = "ลิงก์กล้องนี้มีอยู่ในระบบแล้ว ไม่สามารถเพิ่มซ้ำได้"

@@ -1,8 +1,9 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.camera import CameraDirection, CameraVerificationStatus
+from app.core.url_utils import normalize_rtsp_url
 
 
 class CameraCreate(BaseModel):
@@ -12,6 +13,11 @@ class CameraCreate(BaseModel):
     long: float = Field(ge=-180, le=180)
     stream_ai: str = Field(max_length=1000)
     direction: CameraDirection
+
+    @field_validator("stream_ai")
+    @classmethod
+    def validate_stream_ai(cls, v: str) -> str:
+        return normalize_rtsp_url(v)
 
 
 class CameraUpdate(BaseModel):
@@ -79,6 +85,7 @@ class CameraVerificationCheckRead(BaseModel):
     anomaly_detected: bool
     note: str | None
 
+
 class OnvifProbeRequest(BaseModel):
     host: str = Field(max_length=255)
     port: int = Field(ge=1, le=65535)
@@ -99,12 +106,6 @@ class OnvifProbeResponse(BaseModel):
     device_manufacturer: str | None
     device_model: str | None
     profiles: list[OnvifProfileRead]
-
-class CameraStatusRead(BaseModel):
-    id: uuid.UUID
-    is_active: bool
-    verification_status: CameraVerificationStatus
-    stream_online: bool | None
 
 
 class CameraStreamTokenRead(BaseModel):
