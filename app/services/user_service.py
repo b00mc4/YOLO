@@ -186,6 +186,16 @@ async def create_user(
         if payload.role != UserRole.SUPERADMIN:
             await village_service.get_village(db, village_id)
 
+    if payload.role == UserRole.USER:
+        existing_count_result = await db.execute(
+            select(func.count()).select_from(User).where(User.village_id == village_id)
+        )
+        if existing_count_result.scalar_one() == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=UserErrors.VILLAGE_NEEDS_ADMIN_FIRST,
+            )
+
     user = User(
         username=payload.username,
         fullname=payload.fullname,

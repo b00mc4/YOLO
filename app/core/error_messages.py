@@ -37,7 +37,7 @@ class UserErrors:
     PASSWORD_NOT_SET_YET = "บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน กรุณาใช้ฟังก์ชันส่งคำเชิญอีกครั้งแทน"
     ALREADY_VERIFIED = "ผู้ใช้งานนี้ยืนยันตัวตนแล้ว"
     RESEND_INVITE_COOLDOWN = "กรุณารอสักครู่ก่อนขอส่งคำเชิญอีกครั้ง"
-
+    VILLAGE_NEEDS_ADMIN_FIRST = "หมู่บ้านนี้ยังไม่มีผู้ใช้งาน กรุณาสร้างบัญชี admin ก่อนสร้างบัญชี user"
 
 class VillageErrors:
     NOT_FOUND = "ไม่พบหมู่บ้าน"
