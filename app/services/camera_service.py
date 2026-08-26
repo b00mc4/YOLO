@@ -83,12 +83,24 @@ async def _sync_camera_update(
     camera_id: uuid.UUID,
     village_id: uuid.UUID,
     camera_name: str,
+    stream_ai: str,
     is_active: bool,
 ) -> None:
-    status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
+    failed_services: list[str] = []
 
-    if not status_ok:
-        await camera_sync_service.notify_sync_failure(village_id, camera_id, camera_name, ["ai_vision"])
+    if is_active:
+        mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+    else:
+        mediamtx_ok = await mediamtx_service.remove_path(camera_id)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
+
+    ai_vision_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
+    if not ai_vision_ok:
+        failed_services.append("ai_vision")
+
+    if failed_services:
+        await camera_sync_service.notify_sync_failure(village_id, camera_id, camera_name, failed_services)
 
 
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
@@ -324,6 +336,7 @@ async def update_camera(
                 camera.id,
                 camera.village_id,
                 camera.name,
+                camera.stream_ai,
                 camera.is_active,
             )
         else:
@@ -628,10 +641,10 @@ async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
 
 async def _activate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
-) -> tuple[Camera, bool, list[str]]:
+) -> tuple[Camera, list[str]]:
     async with semaphore:
-        should_verify, failed_services = await camera_sync_service.sync_camera_online(camera.id, camera.stream_ai)
-        return camera, should_verify, failed_services
+        failed_services = await camera_sync_service.sync_camera_online(camera.id, camera.stream_ai)
+        return camera, failed_services
 
 
 async def activate_village_cameras(village_id: uuid.UUID) -> None:
@@ -659,6 +672,6 @@ async def activate_village_cameras(village_id: uuid.UUID) -> None:
         for camera_id in verifying_camera_ids:
             camera_verification_service.start_verification(camera_id)
 
-    for camera, _, failed_services in outcomes:
+    for camera, failed_services in outcomes:
         if failed_services:
             await camera_sync_service.notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))

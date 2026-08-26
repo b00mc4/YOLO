@@ -21,18 +21,18 @@ async def push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool
     return ai_vision_ok, failed_services
 
 
-async def sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
-    ai_vision_pushed, failed_services = await push_stream_config(camera_id, stream_ai)
+async def sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> list[str]:
+    failed_services: list[str] = []
 
-    should_verify = False
-    if ai_vision_pushed:
-        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
-        if active_ok:
-            should_verify = True
-        else:
-            failed_services.append("ai_vision")
+    mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+    if not mediamtx_ok:
+        failed_services.append("mediamtx")
 
-    return should_verify, failed_services
+    ai_vision_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
+    if not ai_vision_ok:
+        failed_services.append("ai_vision")
+
+    return failed_services
 
 
 async def sync_camera_offline(camera_id: uuid.UUID) -> list[str]:
