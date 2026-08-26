@@ -33,7 +33,7 @@ class UserErrors:
     CANNOT_RESET_OWN_PASSWORD = "ไม่สามารถรีเซ็ตรหัสผ่านของตัวเองที่นี่ได้ กรุณาใช้ฟังก์ชันเปลี่ยนรหัสผ่านแทน"
     CANNOT_RESET_SUPERADMIN_PASSWORD = "ไม่สามารถรีเซ็ตรหัสผ่านของ superadmin คนอื่นได้"
     SCOPE_PASSWORD_RESET_DENIED = "ไม่มีสิทธิ์รีเซ็ตรหัสผ่านของผู้ใช้งานนี้"
-    CANNOT_CREATE_ADMIN_OR_SUPERADMIN = "เฉพาะ superadmin เท่านั้นที่สามารถสร้างบัญชี admin หรือ superadmin ได้"
+    CANNOT_CREATE_SUPERADMIN = "ไม่มีสิทธิ์สร้างบัญชี superadmin"
     PASSWORD_NOT_SET_YET = "บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน กรุณาใช้ฟังก์ชันส่งคำเชิญอีกครั้งแทน"
     ALREADY_VERIFIED = "ผู้ใช้งานนี้ยืนยันตัวตนแล้ว"
     RESEND_INVITE_COOLDOWN = "กรุณารอสักครู่ก่อนขอส่งคำเชิญอีกครั้ง"
@@ -41,6 +41,13 @@ class UserErrors:
 
 class VillageErrors:
     NOT_FOUND = "ไม่พบหมู่บ้าน"
+
+
+class CameraErrors:
+    NOT_FOUND = "ไม่พบกล้อง"
+    DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
+    DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
+    SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
 
 
 class ContactErrors:
@@ -65,6 +72,19 @@ class BlacklistErrors:
 class WhitelistErrors:
     NOT_FOUND = "ไม่พบรายการในบัญชีขาว"
     PLATE_IS_BLACKLISTED = "ทะเบียนนี้อยู่ในบัญชีดำของหมู่บ้านนี้อยู่แล้ว"
+
+
+class DetectionErrors:
+    NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
+    IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
+    CAMERA_VILLAGE_INACTIVE = "หมู่บ้านของกล้องนี้ถูกระงับการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
+    CAMERA_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
+    STORE_IMAGE_FAILED = "บันทึกรูปภาพการตรวจจับไม่สำเร็จ"
+    REQUIRED_FILES_MISSING = "ต้องแนบไฟล์ image_crop และ image_full"
+
+    @staticmethod
+    def unsupported_request_content_type(content_type: str) -> str:
+        return f"ไม่รองรับ Content-Type: {content_type}"
 
 
 class StorageErrors:
@@ -103,7 +123,6 @@ class ValidationErrors:
     SUPERADMIN_NO_VILLAGE = "superadmin ต้องไม่มี village_id"
     VILLAGE_REQUIRED_FOR_ROLE = "ต้องระบุ village_id สำหรับสิทธิ์การใช้งานนี้"
 
-
 class DetectionErrors:
     NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
     IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
@@ -122,20 +141,16 @@ class DetectionErrors:
     def date_range_too_wide(max_days: int) -> str:
         return f"ช่วงวันที่ต้องไม่เกิน {max_days} วัน"
 
-
 class OnvifErrors:
     CONNECTION_FAILED = "ไม่สามารถเชื่อมต่อกล้องได้ กรุณาตรวจสอบ IP และพอร์ต"
     INVALID_CREDENTIALS = "ชื่อผู้ใช้หรือรหัสผ่านของกล้องไม่ถูกต้อง"
     NO_MEDIA_PROFILES = "ไม่พบ media profile บนกล้องนี้"
     UNSUPPORTED_OR_UNREACHABLE = "กล้องนี้ไม่รองรับ ONVIF หรือมีปัญหาในการเชื่อมต่อ"
 
-
 class CameraErrors:
     NOT_FOUND = "ไม่พบกล้อง"
     DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
-    DELETE_MUST_DEACTIVATE_FIRST = "ต้องปิดการใช้งานกล้องก่อน จึงจะสามารถลบถาวรได้"
-    AI_VISION_DELETE_RATE_LIMITED = "ระบบ AI vision จำกัดจำนวนคำขอลบกล้อง กรุณาลองใหม่ภายหลัง" 
+    DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
     SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
     STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"
-    INVALID_RTSP_FORMAT = "รูปแบบลิงก์กล้องไม่ถูกต้อง ต้องเป็น rtsp:// หรือ rtsps:// และต้องระบุ host"
-    STREAM_AI_ALREADY_EXISTS = "ลิงก์กล้องนี้มีอยู่ในระบบแล้ว ไม่สามารถเพิ่มซ้ำได้"
+    CANNOT_CREATE_VILLAGE_INACTIVE = "หมู่บ้านนี้ถูกปิดการใช้งาน ไม่สามารถเพิ่มกล้องได้ กรุณาเปิดใช้งานหมู่บ้านก่อน"

@@ -135,13 +135,38 @@ async def update_village(
     action = "village_updated"
     detail = f"village updated: {village.name}"
     is_active_changed = "is_active" in update_data and update_data["is_active"] != previous_is_active
+
+    cascaded_camera_ids: list[uuid.UUID] = []
+
     if is_active_changed:
         if update_data["is_active"]:
             action = "village_activated"
             detail = f"village activated: {village.name}"
+
+            cascaded_camera_ids = await camera_service.cascade_reactivate_village_cameras(db, village.id)
+            if cascaded_camera_ids:
+                await audit_service.log_action(
+                    db,
+                    request,
+                    action="village_cameras_reactivated",
+                    detail=f"reactivated {len(cascaded_camera_ids)} camera(s) after village reactivation",
+                    user_id=current_user.id,
+                    village_id=village.id,
+                )
         else:
             action = "village_deactivated"
             detail = f"village deactivated: {village.name}"
+
+            cascaded_camera_ids = await camera_service.cascade_deactivate_village_cameras(db, village.id)
+            if cascaded_camera_ids:
+                await audit_service.log_action(
+                    db,
+                    request,
+                    action="village_cameras_deactivated",
+                    detail=f"deactivated {len(cascaded_camera_ids)} camera(s) due to village deactivation",
+                    user_id=current_user.id,
+                    village_id=village.id,
+                )
 
     await audit_service.log_action(
         db,
@@ -156,9 +181,13 @@ async def update_village(
 
     if is_active_changed:
         if update_data["is_active"]:
-            background_tasks.add_task(camera_service.activate_village_cameras, village.id)
+            background_tasks.add_task(
+                camera_service.push_cameras_online, village.id, cascaded_camera_ids
+            )
         else:
-            background_tasks.add_task(camera_service.deactivate_village_cameras, village.id)
+            background_tasks.add_task(
+                camera_service.push_cameras_offline, village.id, cascaded_camera_ids
+            )
 
     return village
 
