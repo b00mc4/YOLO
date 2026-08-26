@@ -26,7 +26,7 @@ from app.schemas.camera import (
     CameraVerificationCheckRead,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service
+from app.services import ai_vision_service, audit_service, camera_sync_service, camera_verification_service, mediamtx_service
 from app.services.ai_vision_service import VerificationCheckResult
 from app.core.error_messages import CameraErrors, Common, VillageErrors
 
@@ -39,46 +39,6 @@ _MANUAL_VERIFY_RATE_WINDOW_SECONDS = 30.0
 _UNIQUE_VIOLATION_SQLSTATE = "23505"
 _STREAM_AI_UNIQUE_CONSTRAINT_NAME = "uq_CameraTABLE_stream_ai"
 
-
-async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
-    failed_services: list[str] = []
-
-    mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
-    if not mediamtx_ok:
-        failed_services.append("mediamtx")
-
-    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
-    if not ai_vision_ok:
-        failed_services.append("ai_vision")
-
-    return ai_vision_ok, failed_services
-
-async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
-    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
-
-    should_verify = False
-    if ai_vision_pushed:
-        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
-        if active_ok:
-            should_verify = True
-        else:
-            failed_services.append("ai_vision")
-
-    return should_verify, failed_services
-
-
-async def _sync_camera_offline(camera_id: uuid.UUID) -> list[str]:
-    failed_services: list[str] = []
-
-    mediamtx_ok = await mediamtx_service.remove_path(camera_id)
-    if not mediamtx_ok:
-        failed_services.append("mediamtx")
-
-    ai_vision_ok = await ai_vision_service.set_camera_active_status(camera_id, False)
-    if not ai_vision_ok:
-        failed_services.append("ai_vision")
-
-    return failed_services
 
 def _to_camera_read(camera: Camera) -> CameraRead:
     return CameraRead(
@@ -97,61 +57,26 @@ def _to_camera_read(camera: Camera) -> CameraRead:
     )
 
 
-async def _notify_sync_failure(
-    village_id: uuid.UUID,
-    camera_id: uuid.UUID,
-    camera_name: str,
-    failed_services: list[str],
-) -> None:
-    detail = (
-        f"camera sync failed for '{camera_name}' (id={camera_id}): "
-        f"{', '.join(failed_services)} did not accept the update"
-    )
-    logger.error(detail)
-
-    async with async_session_maker() as db:
-        await audit_service.log_action(
-            db,
-            request=None,
-            action="camera_sync_failed",
-            detail=detail,
-            village_id=village_id,
-        )
-        await notification_service.notify_village(db, village_id, "camera_sync_failed", detail)
-        await db.commit()
-
-    from app.services import channel_service
-
-    await channel_service.alerts.publish(
-        village_id,
-        "camera_sync_failed",
-        {
-            "camera_id": str(camera_id),
-            "camera_name": camera_name,
-            "failed_services": failed_services,
-        },
-    )
-
 async def _sync_camera_create(
     camera_id: uuid.UUID,
     village_id: uuid.UUID,
     camera_name: str,
     stream_ai: str,
 ) -> None:
-    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
+    ai_vision_pushed, failed_services = await camera_sync_service.push_stream_config(camera_id, stream_ai)
 
     if ai_vision_pushed:
         camera_verification_service.start_verification(camera_id)
 
     if failed_services:
-        await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
+        await camera_sync_service.notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
 
 
 async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
     mediamtx_ok = await mediamtx_service.remove_path(camera_id)
 
     if not mediamtx_ok:
-        await _notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
+        await camera_sync_service.notify_sync_failure(village_id, camera_id, camera_name, ["mediamtx"])
 
 
 async def _sync_camera_update(
@@ -163,7 +88,7 @@ async def _sync_camera_update(
     status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
 
     if not status_ok:
-        await _notify_sync_failure(village_id, camera_id, camera_name, ["ai_vision"])
+        await camera_sync_service.notify_sync_failure(village_id, camera_id, camera_name, ["ai_vision"])
 
 
 async def _get_village_or_404(db: AsyncSession, village_id: uuid.UUID) -> Group:
@@ -679,7 +604,7 @@ async def _deactivate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
 ) -> tuple[Camera, list[str]]:
     async with semaphore:
-        failed_services = await _sync_camera_offline(camera.id)
+        failed_services = await camera_sync_service.sync_camera_offline(camera.id)
         return camera, failed_services
 
 async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
@@ -699,13 +624,13 @@ async def deactivate_village_cameras(village_id: uuid.UUID) -> None:
 
     for camera, failed_services in outcomes:
         if failed_services:
-            await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
+            await camera_sync_service.notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
 
 async def _activate_camera_guarded(
     semaphore: asyncio.Semaphore, camera: Camera
 ) -> tuple[Camera, bool, list[str]]:
     async with semaphore:
-        should_verify, failed_services = await _sync_camera_online(camera.id, camera.stream_ai)
+        should_verify, failed_services = await camera_sync_service.sync_camera_online(camera.id, camera.stream_ai)
         return camera, should_verify, failed_services
 
 
@@ -736,4 +661,4 @@ async def activate_village_cameras(village_id: uuid.UUID) -> None:
 
     for camera, _, failed_services in outcomes:
         if failed_services:
-            await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
+            await camera_sync_service.notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
