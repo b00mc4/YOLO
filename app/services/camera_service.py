@@ -27,7 +27,7 @@ from app.schemas.camera import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services import ai_vision_service, audit_service, camera_sync_service, camera_verification_service, mediamtx_service
-from app.services.ai_vision_service import VerificationCheckResult
+from app.services.ai_vision_service import CameraDeleteResult, VerificationCheckResult
 from app.core.error_messages import CameraErrors, Common, VillageErrors
 
 settings = get_settings()
@@ -361,32 +361,47 @@ async def delete_camera(
     if detection_count_result.scalar_one() > 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(CameraErrors.DELETE_HAS_DETECTIONS),
+            detail=CameraErrors.DELETE_HAS_DETECTIONS,
         )
 
-    if camera.ai_vision_synced_at is not None:
+    if camera.is_active:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(CameraErrors.DELETE_ALREADY_LINKED),
+            detail=CameraErrors.DELETE_MUST_DEACTIVATE_FIRST,
+        )
+
+    ai_vision_result = await ai_vision_service.delete_camera(camera.id)
+
+    if ai_vision_result == CameraDeleteResult.RATE_LIMITED:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=CameraErrors.AI_VISION_DELETE_RATE_LIMITED,
+        )
+
+    if ai_vision_result == CameraDeleteResult.UNREACHABLE:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=CameraErrors.SYNC_WITH_AI_VISION_FAILED,
         )
 
     camera_id_value = camera.id
     village_id = camera.village_id
     camera_name = camera.name
 
+    camera_verification_service.cancel_verification(camera_id_value)
+
     await audit_service.log_action(
         db,
         request,
         action="camera_deleted",
-        detail=f"camera deleted: {camera.name}",
+        detail=f"camera permanently deleted: {camera_name} (ai_vision_response={ai_vision_result.value})",
         user_id=current_user.id,
-        village_id=camera.village_id,
+        village_id=village_id,
     )
 
     await db.delete(camera)
     await db.commit()
 
-    camera_verification_service.cancel_verification(camera_id_value)
     background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
 

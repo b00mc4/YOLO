@@ -107,3 +107,35 @@ async def check_camera_verification(camera_id: uuid.UUID) -> VerificationCheckRe
         return VerificationCheckResult.VERIFIED
 
     return VerificationCheckResult.PENDING
+
+class CameraDeleteResult(str, enum.Enum):
+    DELETED = "deleted"
+    NOT_FOUND = "not_found"
+    RATE_LIMITED = "rate_limited"
+    UNREACHABLE = "unreachable"
+
+
+async def delete_camera(camera_id: uuid.UUID) -> CameraDeleteResult:
+    url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/{camera_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
+            response = await client.delete(url, headers={"X-API-Key": settings.ai_vision_api_key})
+    except httpx.HTTPError as exc:
+        logger.warning("ai vision delete_camera request failed for %s: %s", camera_id, exc)
+        return CameraDeleteResult.UNREACHABLE
+
+    if response.status_code == 200:
+        return CameraDeleteResult.DELETED
+
+    if response.status_code == 404:
+        return CameraDeleteResult.NOT_FOUND
+
+    if response.status_code == 429:
+        return CameraDeleteResult.RATE_LIMITED
+
+    logger.warning(
+        "ai vision delete_camera unexpected status for %s: status=%s body=%s",
+        camera_id, response.status_code, response.text,
+    )
+    return CameraDeleteResult.UNREACHABLE

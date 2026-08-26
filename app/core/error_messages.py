@@ -133,7 +133,8 @@ class OnvifErrors:
 class CameraErrors:
     NOT_FOUND = "ไม่พบกล้อง"
     DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
-    DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
+    DELETE_MUST_DEACTIVATE_FIRST = "ต้องปิดการใช้งานกล้องก่อน จึงจะสามารถลบถาวรได้"
+    AI_VISION_DELETE_RATE_LIMITED = "ระบบ AI vision จำกัดจำนวนคำขอลบกล้อง กรุณาลองใหม่ภายหลัง" 
     SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
     STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"
     INVALID_RTSP_FORMAT = "รูปแบบลิงก์กล้องไม่ถูกต้อง ต้องเป็น rtsp:// หรือ rtsps:// และต้องระบุ host"
