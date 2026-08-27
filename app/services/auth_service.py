@@ -22,7 +22,7 @@ from app.models.group import Group
 from app.models.user import User, UserRole
 from app.core.rate_limit import get_rate_limiter
 from app.core.account_lockout import AccountLocked, get_account_locker
-from app.core.error_messages import Auth
+from app.core.error_messages import Auth, UserErrors
 
 settings = get_settings()
 
@@ -217,11 +217,14 @@ async def change_password(
     await db.commit()
 
 
-async def create_verify_token(db: AsyncSession, user: User, verify_type: VerifyType) -> str:
+async def create_verify_token(
+    db: AsyncSession, user: User, verify_type: VerifyType, new_email: str | None = None
+) -> str:
     raw_token = generate_secure_token()
     verify_entry = Verify(
         user_id=user.id,
         type=verify_type,
+        new_email=new_email,
         token_hash=hash_token(raw_token),
         expire_at=datetime.now(timezone.utc) + timedelta(hours=24),
     )
@@ -303,3 +306,48 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
     await db.commit()
 
     return user.username
+
+async def confirm_email_change(db: AsyncSession, request: Request, raw_token: str) -> tuple[str, str]:
+    token_hash = hash_token(raw_token)
+    result = await db.execute(
+        select(Verify).where(
+            Verify.token_hash == token_hash,
+            Verify.type == VerifyType.EMAIL_CHANGE,
+            Verify.used.is_(False),
+        )
+    )
+    verify_entry = result.scalar_one_or_none()
+
+    if verify_entry is None or verify_entry.expire_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
+
+    result = await db.execute(select(User).where(User.id == verify_entry.user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
+
+    existing_email_result = await db.execute(
+        select(User.id).where(User.email == verify_entry.new_email, User.id != user.id)
+    )
+    if existing_email_result.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=UserErrors.EMAIL_ALREADY_IN_USE)
+
+    old_email = user.email
+    user.email = verify_entry.new_email
+    verify_entry.used = True
+
+    await invalidate_pending_verify_tokens(db, user.id, VerifyType.EMAIL_CHANGE, exclude_token_hash=token_hash)
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="email_changed",
+        detail=f"email changed from {old_email} to {user.email} for username: {user.username}",
+        user_id=user.id,
+        village_id=user.village_id,
+    )
+
+    await db.commit()
+
+    return user.username, user.email

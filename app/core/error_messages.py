@@ -38,6 +38,9 @@ class UserErrors:
     ALREADY_VERIFIED = "ผู้ใช้งานนี้ยืนยันตัวตนแล้ว"
     RESEND_INVITE_COOLDOWN = "กรุณารอสักครู่ก่อนขอส่งคำเชิญอีกครั้ง"
     VILLAGE_NEEDS_ADMIN_FIRST = "หมู่บ้านนี้ยังไม่มีผู้ใช้งาน กรุณาสร้างบัญชี admin ก่อนสร้างบัญชี user"
+    EMAIL_SAME_AS_CURRENT = "อีเมลใหม่ต้องไม่ซ้ำกับอีเมลเดิม"
+    EMAIL_ALREADY_IN_USE = "อีเมลนี้ถูกใช้งานแล้ว"
+    EMAIL_CHANGE_COOLDOWN = "กรุณารอสักครู่ก่อนขอเปลี่ยนอีเมลอีกครั้ง"
 
 class VillageErrors:
     NOT_FOUND = "ไม่พบหมู่บ้าน"

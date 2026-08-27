@@ -6,7 +6,7 @@ from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
 from app.core.account_lockout import get_account_locker
-from app.core.security import hash_password, hash_token
+from app.core.security import hash_password, hash_token, verify_password
 from app.models.audit_log import AuditLog
 from app.models.blacklist import Blacklist
 from app.models.whitelist import Whitelist
@@ -18,20 +18,23 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.contact import ContactRead
 from app.schemas.user import (
     AdminResetPasswordRequest,
+    EmailChangeRequest,
     LockedAccountEntry,
     UserCreate,
     UserDetail,
+    UserFullnameUpdate,
     UserMeDetail,
+    UserProfileRead,
     UserStatusUpdate,
     UserSummary,
     UserRegister
 )
 from app.services import audit_service, auth_service, email_service, village_service
 from app.models.group import Group
-from app.core.error_messages import Common, UserErrors
+from app.core.error_messages import Auth, Common, UserErrors
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
-
+_EMAIL_CHANGE_COOLDOWN = timedelta(minutes=1)
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -533,3 +536,85 @@ async def list_locked_accounts(
     ]
     entries.sort(key=lambda entry: entry.unlocked_at, reverse=True)
     return entries
+
+
+async def update_user_fullname(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+    payload: UserFullnameUpdate,
+) -> UserProfileRead:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    target.fullname = payload.fullname
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_fullname_updated",
+        detail=f"updated fullname for user: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    await db.refresh(target)
+    return UserProfileRead.model_validate(target)
+
+
+async def request_email_change(
+    db: AsyncSession,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: User,
+    user_id: uuid.UUID,
+    payload: EmailChangeRequest,
+) -> None:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    if current_user.hashpassword is None or not verify_password(
+        payload.current_password, current_user.hashpassword
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
+
+    if payload.new_email == target.email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=UserErrors.EMAIL_SAME_AS_CURRENT)
+
+    existing_email_result = await db.execute(select(User.id).where(User.email == payload.new_email))
+    if existing_email_result.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=UserErrors.EMAIL_ALREADY_IN_USE)
+
+    last_sent_result = await db.execute(
+        select(Verify.created_at)
+        .where(Verify.user_id == target.id, Verify.type == VerifyType.EMAIL_CHANGE)
+        .order_by(Verify.created_at.desc())
+        .limit(1)
+    )
+    last_sent_at = last_sent_result.scalar_one_or_none()
+    if last_sent_at is not None and datetime.now(timezone.utc) - last_sent_at < _EMAIL_CHANGE_COOLDOWN:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=UserErrors.EMAIL_CHANGE_COOLDOWN)
+
+    raw_token = await auth_service.create_verify_token(
+        db, target, VerifyType.EMAIL_CHANGE, new_email=payload.new_email
+    )
+    await auth_service.invalidate_pending_verify_tokens(
+        db, target.id, VerifyType.EMAIL_CHANGE, exclude_token_hash=hash_token(raw_token)
+    )
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="email_change_requested",
+        detail=f"requested email change to {payload.new_email} for user: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+
+    background_tasks.add_task(
+        email_service.send_email_change_confirmation_background, payload.new_email, raw_token
+    )

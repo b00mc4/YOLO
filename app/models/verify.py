@@ -12,6 +12,7 @@ from app.db.base_class import Base
 class VerifyType(str, enum.Enum):
     INITIAL_SETUP = "initial_setup"
     PASSWORD_RESET = "password_reset"
+    EMAIL_CHANGE = "email_change"
 
 
 class Verify(Base):
@@ -20,6 +21,7 @@ class Verify(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(SAEnum(VerifyType, name="verify_type"), nullable=False)
+    new_email = Column(String(255), nullable=True)
     token_hash = Column(String(255), nullable=False, index=True)
     expire_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, nullable=False, server_default=false())

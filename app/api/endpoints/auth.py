@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    EmailChangeConfirm,
+    EmailChangeConfirmResponse,
     ForgotPasswordRequest,
     LoginResponse,
     SetPasswordRequest,
@@ -24,8 +26,8 @@ settings = get_settings()
 
 _REFRESH_COOKIE_PATH = "/api/auth"
 
-_LOGIN_IP_LIMIT = 99999999999
-_LOGIN_IP_WINDOW_SECONDS = 30 * 60
+_LOGIN_IP_LIMIT = 10
+_LOGIN_IP_WINDOW_SECONDS = 60
 _FORGOT_PASSWORD_IP_LIMIT = 20
 _FORGOT_PASSWORD_IP_WINDOW_SECONDS = 60 * 60
 
@@ -120,6 +122,20 @@ async def set_password(
     return SetPasswordResponse(
         detail=f"ยินดีด้วย คุณสมัครสำเร็จ สามารถเข้าสู่ระบบได้เลยโดยใช้ username: {username}",
         username=username,
+    )
+
+
+@router.post("/confirm-email-change", response_model=EmailChangeConfirmResponse)
+async def confirm_email_change(
+    payload: EmailChangeConfirm,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    username, email = await auth_service.confirm_email_change(db, request, payload.token)
+    return EmailChangeConfirmResponse(
+        detail=f"เปลี่ยนอีเมลสำเร็จ อีเมลใหม่ของคุณคือ {email}",
+        username=username,
+        email=email,
     )
 
 

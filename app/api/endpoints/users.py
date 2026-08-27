@@ -9,10 +9,13 @@ from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.user import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
+    EmailChangeRequest,
     LockedAccountEntry,
     UserCreate,
     UserDetail,
+    UserFullnameUpdate,
     UserMeDetail,
+    UserProfileRead,
     UserStatusUpdate,
     UserSummary,
     UserRegister
@@ -90,6 +93,30 @@ async def update_user_status(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.set_user_active_status(db, request, current_user, user_id, payload)
+
+
+@router.patch("/{user_id}/profile", response_model=UserProfileRead)
+async def update_user_fullname(
+    user_id: uuid.UUID,
+    payload: UserFullnameUpdate,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await user_service.update_user_fullname(db, request, current_user, user_id, payload)
+
+
+@router.post("/{user_id}/email-change", response_model=MessageResponse)
+async def request_user_email_change(
+    user_id: uuid.UUID,
+    payload: EmailChangeRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await user_service.request_email_change(db, request, background_tasks, current_user, user_id, payload)
+    return MessageResponse(detail="ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว กรุณายืนยันภายใน 24 ชั่วโมง")
 
 
 @router.post("/{user_id}/reset-password", response_model=AdminResetPasswordResponse)

@@ -208,3 +208,24 @@ def send_blacklist_alert_email(
     html_body = _render_blacklist_alert_html(camera_name, license_plate, province, detected_at_local)
 
     return send_bulk_plain_email(to_emails, subject, text_body, html_body)
+
+def send_email_change_confirmation_email(to_email: str, raw_token: str) -> None:
+    link = f"{settings.frontend_url}/confirm-email-change?token={raw_token}"
+    _send_email(
+        to_email=to_email,
+        subject="ยืนยันการเปลี่ยนอีเมลของบัญชีคุณ",
+        text_body=f"กรุณาคลิกลิงก์เพื่อยืนยันการเปลี่ยนอีเมล: {link}",
+        html_body=_render_email_html(
+            heading="ยืนยันการเปลี่ยนอีเมลของบัญชีคุณ",
+            message_text="กรุณากดปุ่มด้านล่างเพื่อยืนยันว่าต้องการเปลี่ยนอีเมลของบัญชีเป็นอีเมลนี้",
+            button_text="ยืนยันการเปลี่ยนอีเมล",
+            button_url=link,
+        ),
+    )
+
+
+def send_email_change_confirmation_background(to_email: str, raw_token: str) -> None:
+    try:
+        send_email_change_confirmation_email(to_email, raw_token)
+    except Exception:
+        logger.warning("Failed to send email change confirmation to %s", to_email)

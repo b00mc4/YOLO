@@ -117,3 +117,32 @@ class LockedAccountEntry(BaseModel):
     village_id: uuid.UUID | None
     village_name: str | None
     unlocked_at: datetime
+
+class UserFullnameUpdate(BaseModel):
+    fullname: str = Field(max_length=255)
+
+    @field_validator("fullname")
+    @classmethod
+    def normalize_fullname(cls, v: str) -> str:
+        return v.strip()
+
+
+class UserProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    fullname: str
+    email: EmailStr
+    role: UserRole
+    village_id: uuid.UUID | None
+
+
+class EmailChangeRequest(BaseModel):
+    new_email: EmailStr = Field(max_length=255)
+    current_password: str = Field(max_length=128)
+
+    @field_validator("new_email")
+    @classmethod
+    def normalize_new_email(cls, v: str) -> str:
+        return v.strip().lower()

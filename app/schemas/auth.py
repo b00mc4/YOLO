@@ -44,3 +44,12 @@ class ChangePasswordRequest(BaseModel):
         if self.new_password != self.confirm_new_password:
             raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
         return self
+
+class EmailChangeConfirm(BaseModel):
+    token: str = Field(max_length=512)
+
+
+class EmailChangeConfirmResponse(BaseModel):
+    detail: str
+    username: str
+    email: EmailStr
