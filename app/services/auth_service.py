@@ -35,6 +35,14 @@ _LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
 _FORGOT_PASSWORD_EMAIL_LIMIT = 5
 _FORGOT_PASSWORD_EMAIL_WINDOW_SECONDS = 24 * 60 * 60
 
+_VERIFY_TOKEN_TTL: dict[VerifyType, timedelta] = {
+    VerifyType.PASSWORD_RESET: timedelta(minutes=15),
+    VerifyType.INITIAL_SETUP: timedelta(days=1),
+    VerifyType.EMAIL_CHANGE: timedelta(hours=12),
+}
+
+_SET_PASSWORD_ELIGIBLE_TYPES = (VerifyType.INITIAL_SETUP, VerifyType.PASSWORD_RESET)
+
 async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str):
     normalized_username = username.strip().lower()
     rate_limit_key = f"login:username:{normalized_username}"
@@ -231,7 +239,7 @@ async def create_verify_token(
         type=verify_type,
         new_email=new_email,
         token_hash=hash_token(raw_token),
-        expire_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        expire_at=datetime.now(timezone.utc) + _VERIFY_TOKEN_TTL[verify_type],
     )
     db.add(verify_entry)
     await db.flush()
@@ -286,14 +294,27 @@ async def request_password_reset(
     )
 
 
-async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> str:
+async def _resolve_set_password_token(db: AsyncSession, raw_token: str) -> Verify:
     token_hash = hash_token(raw_token)
-    result = await db.execute(select(Verify).where(Verify.token_hash == token_hash, Verify.used.is_(False)))
+    result = await db.execute(
+        select(Verify).where(
+            Verify.token_hash == token_hash,
+            Verify.used.is_(False),
+            Verify.type.in_(_SET_PASSWORD_ELIGIBLE_TYPES),
+        )
+    )
     verify_entry = result.scalar_one_or_none()
-
     if verify_entry is None or verify_entry.expire_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
+    return verify_entry
 
+
+async def verify_set_password_token(db: AsyncSession, raw_token: str) -> None:
+    await _resolve_set_password_token(db, raw_token)
+
+
+async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> str:
+    verify_entry = await _resolve_set_password_token(db, raw_token)
     result = await db.execute(select(User).where(User.id == verify_entry.user_id))
     user = result.scalar_one_or_none()
 

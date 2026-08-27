@@ -15,11 +15,15 @@ from app.schemas.auth import (
     SetPasswordRequest,
     SetPasswordResponse,
     TokenResponse,
+    VerifyTokenRequest
 )
 from app.schemas.common import MessageResponse
 from app.services import auth_service
 from app.api.deps import get_current_user, rate_limit_by_ip
 from app.core.error_messages import Auth
+
+_VERIFY_SET_PASSWORD_TOKEN_IP_LIMIT = 20
+_VERIFY_SET_PASSWORD_TOKEN_IP_WINDOW_SECONDS = 10 * 60
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -116,6 +120,25 @@ async def forgot_password(
     db: AsyncSession = Depends(get_db),
 ):
     await auth_service.request_password_reset(db, background_tasks, payload.email)
+
+
+@router.post(
+    "/set-password/verify-token",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[
+        Depends(rate_limit_by_ip(
+            "verify_set_password_token",
+            _VERIFY_SET_PASSWORD_TOKEN_IP_LIMIT,
+            _VERIFY_SET_PASSWORD_TOKEN_IP_WINDOW_SECONDS,
+        ))
+    ],
+)
+async def verify_set_password_token(
+    payload: VerifyTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await auth_service.verify_set_password_token(db, payload.token)
+
 
 @router.post(
     "/set-password",

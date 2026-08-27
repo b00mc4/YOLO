@@ -53,3 +53,6 @@ class EmailChangeConfirmResponse(BaseModel):
     detail: str
     username: str
     email: EmailStr
+
+class VerifyTokenRequest(BaseModel):
+    token: str = Field(max_length=512)
