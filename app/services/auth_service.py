@@ -184,16 +184,7 @@ async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str):
 
 async def revoke_all_refresh_tokens(db: AsyncSession, user_id: uuid.UUID):
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
-
-async def revoke_other_refresh_tokens(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    current_raw_refresh_token: str | None,
-) -> None:
-    stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
-    if current_raw_refresh_token is not None:
-        stmt = stmt.where(RefreshToken.token_hash != hash_token(current_raw_refresh_token))
-    await db.execute(stmt)
+    
 
 async def change_password(
     db: AsyncSession,
@@ -201,8 +192,6 @@ async def change_password(
     current_user: User,
     current_password: str,
     new_password: str,
-    logout_all_sessions: bool,
-    current_raw_refresh_token: str | None,
 ) -> None:
     reauth_key = password_reauth_key(current_user.id)
     get_rate_limiter().check(reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS)
@@ -213,11 +202,9 @@ async def change_password(
     get_rate_limiter().reset(reauth_key)
 
     current_user.hashpassword = hash_password(new_password)
+    current_user.password_changed_at = datetime.now(timezone.utc)
 
-    if logout_all_sessions:
-        await revoke_all_refresh_tokens(db, current_user.id)
-    else:
-        await revoke_other_refresh_tokens(db, current_user.id, current_raw_refresh_token)
+    await revoke_all_refresh_tokens(db, current_user.id)
 
     await audit_service.log_action(
         db,
@@ -227,6 +214,7 @@ async def change_password(
         user_id=current_user.id,
         village_id=current_user.village_id,
     )
+    await db.commit()
     await db.commit()
 
 
@@ -322,10 +310,11 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
 
     user.hashpassword = hash_password(new_password)
+    user.password_changed_at = datetime.now(timezone.utc)
     user.is_verify = True
     verify_entry.used = True
     token_hash = hash_token(raw_token)
-    
+
     await invalidate_pending_verify_tokens(
         db, user.id, verify_entry.type, exclude_token_hash=token_hash
     )

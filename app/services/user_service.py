@@ -338,6 +338,7 @@ async def reset_user_password(
         )
 
     target.hashpassword = hash_password(payload.new_password)
+    target.password_changed_at = datetime.now(timezone.utc)
     await auth_service.revoke_all_refresh_tokens(db, target.id)
 
     await audit_service.log_action(

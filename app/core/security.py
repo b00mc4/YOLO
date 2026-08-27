@@ -37,9 +37,10 @@ def create_access_token(user_id: uuid.UUID):
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str):
+def decode_access_token(token: str) -> tuple[uuid.UUID, datetime]:
     payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
-    return uuid.UUID(payload["sub"])
+    issued_at = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
+    return uuid.UUID(payload["sub"]), issued_at
 
 
 def generate_secure_token():

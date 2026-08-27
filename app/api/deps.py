@@ -29,7 +29,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        user_id = decode_access_token(token)
+        user_id, issued_at = decode_access_token(token)
     except (jwt.PyJWTError, ValueError, KeyError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -72,6 +72,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=Auth.VILLAGE_INACTIVE,
+            headers=_UNAUTHORIZED_HEADERS,
+        )
+
+    if issued_at < user.password_changed_at:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=Auth.SESSION_REVOKED_PASSWORD_CHANGED,
             headers=_UNAUTHORIZED_HEADERS,
         )
 

@@ -24,7 +24,8 @@ class Auth:
     MISSING_REFRESH_TOKEN = "ไม่พบ refresh token"
     CURRENT_PASSWORD_INCORRECT = "รหัสผ่านปัจจุบันไม่ถูกต้อง"
     INVALID_OR_EXPIRED_TOKEN = "โทเคนไม่ถูกต้องหรือหมดอายุ"
-
+    SESSION_REVOKED_PASSWORD_CHANGED = "เซสชันถูกยกเลิกเนื่องจากมีการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่"
+    
 
 class UserErrors:
     NOT_FOUND = "ไม่พบผู้ใช้งาน"

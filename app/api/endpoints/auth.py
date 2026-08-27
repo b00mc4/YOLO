@@ -184,16 +184,12 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
 ):
     """อันนี้คือเปลี่ยนรหัสผ่านเองได้เมื่อ login เข้ามาแล้ว"""
-    current_raw_refresh_token = request.cookies.get(auth_service.REFRESH_TOKEN_COOKIE_NAME)
     await auth_service.change_password(
         db=db,
         request=request,
         current_user=current_user,
         current_password=payload.current_password,
         new_password=payload.new_password,
-        logout_all_sessions=payload.logout_all_sessions,
-        current_raw_refresh_token=current_raw_refresh_token,
     )
-    if payload.logout_all_sessions:
-        _clear_refresh_cookie(response)
+    _clear_refresh_cookie(response)
     return MessageResponse(detail="Password changed successfully")

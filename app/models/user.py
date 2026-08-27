@@ -33,6 +33,7 @@ class User(Base):
     village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id"), nullable=True, index=True)
     is_active = Column(Boolean, nullable=False)
     is_verify = Column(Boolean, nullable=False)
+    password_changed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     village = relationship("Group", back_populates="users")

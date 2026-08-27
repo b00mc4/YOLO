@@ -32,7 +32,6 @@ class ChangePasswordRequest(BaseModel):
     current_password: str = Field(max_length=128)
     new_password: str = Field(max_length=36)
     confirm_new_password: str = Field(max_length=36)
-    logout_all_sessions: bool
 
     @field_validator("new_password")
     @classmethod
