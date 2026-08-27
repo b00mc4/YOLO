@@ -76,6 +76,7 @@ class UserSummary(BaseModel):
     is_active: bool
     is_verify: bool
     created_at: datetime
+    avatar_url: str | None      
 
 
 class UserDetail(BaseModel):
@@ -85,6 +86,7 @@ class UserDetail(BaseModel):
     email: EmailStr
     role: UserRole
     village_id: uuid.UUID | None
+    avatar_url: str | None
     is_active: bool
     is_verify: bool
     created_at: datetime
@@ -98,6 +100,7 @@ class UserMeDetail(BaseModel):
     email: EmailStr
     role: UserRole
     village_id: uuid.UUID | None
+    avatar_url: str | None
     is_active: bool
     is_verify: bool
     created_at: datetime
@@ -137,6 +140,7 @@ class UserProfileRead(BaseModel):
     email: EmailStr
     role: UserRole
     village_id: uuid.UUID | None
+    avatar_url: str | None
 
 
 class EmailChangeRequest(BaseModel):

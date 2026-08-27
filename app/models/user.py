@@ -27,6 +27,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String(255), unique=True, nullable=False)
     fullname = Column(String(255), nullable=False)
+    avatar_path = Column(String(255), nullable=True)
     hashpassword = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, nullable=False)
     role = Column(SAEnum(UserRole, name="user_role", values_callable=lambda enum_cls: [member.value for member in enum_cls]),nullable=False,)

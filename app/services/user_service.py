@@ -1,7 +1,8 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import BackgroundTasks, HTTPException, Request, status
+from pathlib import Path
+from fastapi import BackgroundTasks, HTTPException, Request, UploadFile, status
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
@@ -29,13 +30,23 @@ from app.schemas.user import (
     UserSummary,
     UserRegister
 )
-from app.services import audit_service, auth_service, email_service, village_service
+from app.services import audit_service, auth_service, email_service, storage_service, village_service
 from app.models.group import Group
-from app.core.error_messages import Auth, Common, UserErrors
+from app.core.error_messages import Auth, AvatarErrors, Common, UserErrors
 from app.core.rate_limit import get_rate_limiter, password_reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 _EMAIL_CHANGE_COOLDOWN = timedelta(minutes=1)
+_AVATAR_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+_AVATAR_UPLOAD_LIMIT = 10
+_AVATAR_UPLOAD_WINDOW_SECONDS = 30 * 60
+
+
+def _build_avatar_url(request: Request, user: User) -> str | None:
+    if user.avatar_path is None:
+        return None
+    return str(request.url_for("get_user_avatar", user_id=user.id))
+
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -61,6 +72,16 @@ def _verify_user_write_scope(current_user: User, target: User) -> None:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=UserErrors.SCOPE_OUTSIDE_VILLAGE,
             )
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=Common.INSUFFICIENT_PERMISSIONS)
+
+
+def _verify_avatar_view_scope(current_user: User, target: User) -> None:
+    if current_user.role == UserRole.SUPERADMIN:
+        return
+    if target.id == current_user.id:
+        return
+    if current_user.role == UserRole.ADMIN and target.village_id == current_user.village_id:
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=Common.INSUFFICIENT_PERMISSIONS)
 
@@ -122,7 +143,7 @@ def _build_user_list_filters(
     return filters
 
 
-async def _to_user_detail(db: AsyncSession, user: User) -> UserDetail:
+async def _to_user_detail(db: AsyncSession, request: Request, user: User) -> UserDetail:
     contact_count_result = await db.execute(
         select(func.count()).select_from(Contact).where(Contact.user_id == user.id)
     )
@@ -139,10 +160,11 @@ async def _to_user_detail(db: AsyncSession, user: User) -> UserDetail:
         is_verify=user.is_verify,
         created_at=user.created_at,
         contact_count=contact_count,
+        avatar_url=_build_avatar_url(request, user),
     )
 
 
-async def _to_user_me_detail(db: AsyncSession, user: User) -> UserMeDetail:
+async def _to_user_me_detail(db: AsyncSession, request: Request, user: User) -> UserMeDetail:
     contacts_result = await db.execute(
         select(Contact).where(Contact.user_id == user.id).order_by(Contact.created_at.desc())
     )
@@ -159,6 +181,7 @@ async def _to_user_me_detail(db: AsyncSession, user: User) -> UserMeDetail:
         is_verify=user.is_verify,
         created_at=user.created_at,
         contacts=[ContactRead.model_validate(contact) for contact in contacts],
+        avatar_url=_build_avatar_url(request, user),
     )
 
 def _to_user_register(user: User) -> UserRegister:
@@ -234,6 +257,7 @@ async def create_user(
 
 async def list_users(
     db: AsyncSession,
+    request: Request,
     current_user: User,
     village_id_filter: uuid.UUID | None,
     role_filter: UserRole | None,
@@ -260,21 +284,32 @@ async def list_users(
     items = result.scalars().all()
 
     return PaginatedResponse[UserSummary](
-        items=[UserSummary.model_validate(item) for item in items],
+        items=[
+            UserSummary(
+                id=item.id,
+                username=item.username,
+                role=item.role,
+                is_active=item.is_active,
+                is_verify=item.is_verify,
+                created_at=item.created_at,
+                avatar_url=_build_avatar_url(request, item),
+            )
+            for item in items
+        ],                                 
         total=total,
         page=page,
         page_size=page_size,
     )
 
 
-async def get_own_user_detail(db: AsyncSession, current_user: User) -> UserMeDetail:
-    return await _to_user_me_detail(db, current_user)
+async def get_own_user_detail(db: AsyncSession, request: Request, current_user: User) -> UserMeDetail:
+    return await _to_user_me_detail(db, request, current_user)
 
 
-async def get_user_detail(db: AsyncSession, current_user: User, user_id: uuid.UUID) -> UserDetail:
+async def get_user_detail(db: AsyncSession, request: Request, current_user: User, user_id: uuid.UUID) -> UserDetail:
     user = await _get_user_or_404(db, user_id)
     verify_village_scope(current_user, user.village_id)
-    return await _to_user_detail(db, user)
+    return await _to_user_detail(db, request, user)
 
 
 async def set_user_active_status(
@@ -318,7 +353,7 @@ async def set_user_active_status(
 
     await db.commit()
     await db.refresh(target)
-    return await _to_user_detail(db, target)
+    return await _to_user_detail(db, request, target)
 
 
 async def reset_user_password(
@@ -404,7 +439,7 @@ async def resend_invite(
 
     background_tasks.add_task(email_service.send_invite_email_background, target.email, raw_token)
 
-    return await _to_user_detail(db, target)
+    return await _to_user_detail(db, request, target)
 
 
 async def unlock_user_account(
@@ -563,7 +598,15 @@ async def update_user_fullname(
 
     await db.commit()
     await db.refresh(target)
-    return UserProfileRead.model_validate(target)
+    return UserProfileRead(
+        id=target.id,
+        username=target.username,
+        fullname=target.fullname,
+        email=target.email,
+        role=target.role,
+        village_id=target.village_id,
+        avatar_url=_build_avatar_url(request, target),
+    )
 
 
 async def request_email_change(
@@ -625,3 +668,112 @@ async def request_email_change(
     background_tasks.add_task(
         email_service.send_email_change_confirmation_background, payload.new_email, raw_token
     )
+
+
+async def upload_user_avatar(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+    file: UploadFile,
+) -> UserProfileRead:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    get_rate_limiter().check(
+        f"avatar_upload:{target.id}", _AVATAR_UPLOAD_LIMIT, _AVATAR_UPLOAD_WINDOW_SECONDS
+    )
+
+    content, extension = await storage_service.read_and_validate_image(
+        file, max_size_bytes=_AVATAR_MAX_IMAGE_SIZE_BYTES
+    )
+
+    image_id = uuid.uuid4()
+    new_path = storage_service.build_avatar_path(target.id, image_id, extension)
+
+    try:
+        await storage_service.write_image(new_path, content)
+    except OSError:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=AvatarErrors.STORE_FAILED,
+        )
+
+    old_path = target.avatar_path
+    is_replace = old_path is not None
+    target.avatar_path = new_path
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_avatar_replaced" if is_replace else "user_avatar_added",
+        detail=(
+            f"replaced avatar for user: {target.username}"
+            if is_replace
+            else f"added avatar for user: {target.username}"
+        ),
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    await db.refresh(target)
+
+    if old_path is not None:
+        await storage_service.delete_image(old_path)
+
+    return UserProfileRead(
+        id=target.id,
+        username=target.username,
+        fullname=target.fullname,
+        email=target.email,
+        role=target.role,
+        village_id=target.village_id,
+        avatar_url=_build_avatar_url(request, target),
+    )
+
+
+async def delete_user_avatar(
+    db: AsyncSession,
+    request: Request,
+    current_user: User,
+    user_id: uuid.UUID,
+) -> None:
+    target = await _get_user_or_404(db, user_id)
+    _verify_user_write_scope(current_user, target)
+
+    if target.avatar_path is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=AvatarErrors.ALREADY_NULL)
+
+    old_path = target.avatar_path
+    target.avatar_path = None
+
+    await audit_service.log_action(
+        db,
+        request,
+        action="user_avatar_removed",
+        detail=f"removed avatar for user: {target.username}",
+        user_id=current_user.id,
+        village_id=target.village_id,
+    )
+
+    await db.commit()
+    await storage_service.delete_image(old_path)
+
+
+async def get_user_avatar_path(
+    db: AsyncSession,
+    current_user: User,
+    user_id: uuid.UUID,
+) -> tuple[Path, str]:
+    target = await _get_user_or_404(db, user_id)
+    _verify_avatar_view_scope(current_user, target)
+
+    if target.avatar_path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AvatarErrors.NOT_SET)
+
+    absolute_path = storage_service.resolve_storage_path(target.avatar_path)
+    if not absolute_path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AvatarErrors.NOT_SET)
+
+    return absolute_path, storage_service.guess_media_type(absolute_path)

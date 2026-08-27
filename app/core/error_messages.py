@@ -25,7 +25,7 @@ class Auth:
     CURRENT_PASSWORD_INCORRECT = "รหัสผ่านปัจจุบันไม่ถูกต้อง"
     INVALID_OR_EXPIRED_TOKEN = "โทเคนไม่ถูกต้องหรือหมดอายุ"
     SESSION_REVOKED_PASSWORD_CHANGED = "เซสชันถูกยกเลิกเนื่องจากมีการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่"
-    
+
 
 class UserErrors:
     NOT_FOUND = "ไม่พบผู้ใช้งาน"
@@ -161,3 +161,8 @@ class CameraErrors:
     SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
     STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"
     CANNOT_CREATE_VILLAGE_INACTIVE = "หมู่บ้านนี้ถูกปิดการใช้งาน ไม่สามารถเพิ่มกล้องได้ กรุณาเปิดใช้งานหมู่บ้านก่อน"
+
+class AvatarErrors:
+    NOT_SET = "ผู้ใช้งานนี้ยังไม่ได้ตั้งรูปโปรไฟล์"
+    ALREADY_NULL = "ผู้ใช้งานนี้ไม่มีรูปโปรไฟล์ให้ลบ"
+    STORE_FAILED = "บันทึกรูปโปรไฟล์ไม่สำเร็จ"

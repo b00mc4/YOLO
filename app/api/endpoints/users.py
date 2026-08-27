@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, Request, UploadFile, status   
+from fastapi.responses import FileResponse                                                          
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
@@ -40,6 +41,7 @@ async def create_user(
 
 @router.get("", response_model=PaginatedResponse[UserSummary])
 async def list_users(
+    request: Request,
     village_id: uuid.UUID | None = Query(default=None),
     role: UserRole | None = Query(default=None),
     is_active: bool | None = Query(default=None),
@@ -50,22 +52,17 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.list_users(
-        db, current_user, village_id, role, is_active, search, page, page_size
+        db, request, current_user, village_id, role, is_active, search, page, page_size
     )
 
 
 @router.get("/me", response_model=UserMeDetail)
 async def get_my_detail(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    ดูข้อมูลของบัญชีตัวเอง
-
-    ใช้ได้ทุก role ที่ login สำเร็จ (รวมถึง role `user` เช่นยามที่ไม่มีสิทธิ์
-    เรียก endpoint อื่นในกลุ่มนี้) เพราะเช็คแค่ตัวตนจาก token ไม่เช็ค role
-    """
-    return await user_service.get_own_user_detail(db, current_user)
+    return await user_service.get_own_user_detail(db, request, current_user)
 
 @router.get("/locked-accounts", response_model=list[LockedAccountEntry])
 async def list_locked_accounts(
@@ -78,10 +75,11 @@ async def list_locked_accounts(
 @router.get("/{user_id}", response_model=UserDetail)
 async def get_user_detail(
     user_id: uuid.UUID,
+    request: Request,
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await user_service.get_user_detail(db, current_user, user_id)
+    return await user_service.get_user_detail(db, request, current_user, user_id)
 
 
 @router.patch("/{user_id}", response_model=UserDetail)
@@ -104,6 +102,38 @@ async def update_user_fullname(
     db: AsyncSession = Depends(get_db),
 ):
     return await user_service.update_user_fullname(db, request, current_user, user_id, payload)
+
+
+@router.post("/{user_id}/avatar", response_model=UserProfileRead)
+async def upload_user_avatar(
+    user_id: uuid.UUID,
+    request: Request,
+    avatar: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await user_service.upload_user_avatar(db, request, current_user, user_id, avatar)
+
+
+@router.delete("/{user_id}/avatar", response_model=MessageResponse)
+async def delete_user_avatar(
+    user_id: uuid.UUID,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await user_service.delete_user_avatar(db, request, current_user, user_id)
+    return MessageResponse(detail="ลบรูปโปรไฟล์สำเร็จ")
+
+
+@router.get("/{user_id}/avatar", name="get_user_avatar")
+async def get_user_avatar(
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    file_path, media_type = await user_service.get_user_avatar_path(db, current_user, user_id)
+    return FileResponse(file_path, media_type=media_type)
 
 
 @router.post("/{user_id}/email-change", response_model=MessageResponse)

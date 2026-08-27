@@ -170,7 +170,7 @@ async def _check_is_whitelisted(
 
 async def _cleanup_written_images(written_paths: list[str]) -> None:
     for relative_path in written_paths:
-        await storage_service.delete_detection_image(relative_path)
+        await storage_service.delete_image(relative_path)
 
 
 def _build_detection_event_payload(request: Request, camera: Camera, car: Car) -> DetectionEventPayload:
@@ -290,9 +290,9 @@ async def create_detection(
 
     written_paths: list[str] = []
     try:
-        await storage_service.write_detection_image(crop_path, crop_content)
+        await storage_service.write_image(crop_path, crop_content)
         written_paths.append(crop_path)
-        await storage_service.write_detection_image(full_path, full_content)
+        await storage_service.write_image(full_path, full_content)
         written_paths.append(full_path)
     except OSError:
         await _cleanup_written_images(written_paths)

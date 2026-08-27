@@ -40,13 +40,13 @@ def validate_image_content_type(upload: UploadFile) -> None:
             detail=StorageErrors.unsupported_image_content_type(upload.content_type),
         )
 
-async def _read_with_size_limit(upload: UploadFile) -> bytes:
+async def _read_with_size_limit(upload: UploadFile, max_size_bytes: int) -> bytes:
     chunks: list[bytes] = []
     total_size = 0
 
     while chunk := await upload.read(_READ_CHUNK_SIZE_BYTES):
         total_size += len(chunk)
-        if total_size > _MAX_IMAGE_SIZE_BYTES:
+        if total_size > max_size_bytes:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=StorageErrors.image_too_large(_MAX_IMAGE_SIZE_BYTES // (1024 * 1024)),
@@ -75,9 +75,11 @@ def _detect_image_extension(content: bytes) -> str:
  
     return extension
 
-async def read_and_validate_image(upload: UploadFile) -> tuple[bytes, str]:
+async def read_and_validate_image(
+    upload: UploadFile, max_size_bytes: int = _MAX_IMAGE_SIZE_BYTES
+) -> tuple[bytes, str]:
     validate_image_content_type(upload)
-    content = await _read_with_size_limit(upload)
+    content = await _read_with_size_limit(upload, max_size_bytes)
     extension = await run_in_threadpool(_detect_image_extension, content)
     return content, extension
 
@@ -90,6 +92,11 @@ def build_detection_image_path(
     extension: str,
 ) -> str:
     relative_path = Path(str(village_id)) / str(camera_id) / f"{image_id}_{suffix}.{extension}"
+    return str(relative_path)
+
+
+def build_avatar_path(user_id: uuid.UUID, image_id: uuid.UUID, extension: str) -> str:
+    relative_path = Path("avatars") / str(user_id) / f"{image_id}.{extension}"
     return str(relative_path)
 
 
@@ -107,7 +114,7 @@ def _delete_file(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
     except OSError:
-        logger.warning("Failed to delete orphaned detection image: %s", path)
+        logger.warning("Failed to delete orphaned image: %s", path)
 
 
 async def delete_detection_image(relative_path: str) -> None:
