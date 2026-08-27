@@ -43,7 +43,7 @@ _VERIFY_TOKEN_TTL: dict[VerifyType, timedelta] = {
 
 _SET_PASSWORD_ELIGIBLE_TYPES = (VerifyType.INITIAL_SETUP, VerifyType.PASSWORD_RESET)
 
-async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str):
+async def authenticate_user(db: AsyncSession, request: Request, username: str, password: str, remember_me: bool):
     normalized_username = username.strip().lower()
     rate_limit_key = f"login:username:{normalized_username}"
     locker_key = normalized_username
@@ -127,7 +127,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         db,
         request,
         action="login_success",
-        detail=f"successful login for username: {username}",
+        detail=f"successful login for username: {username} (remember_me={remember_me})",
         user_id=user.id,
         village_id=user.village_id,
     )
@@ -136,14 +136,20 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     return user
 
 
-async def issue_tokens(db: AsyncSession, user: User):
+async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
     access_token = create_access_token(user.id)
     raw_refresh_token = generate_secure_token()
+
+    if remember_me:
+        expires_delta = timedelta(days=settings.refresh_token_expire_days)
+    else:
+        expires_delta = timedelta(hours=settings.refresh_token_session_expire_hours)
 
     refresh_token = RefreshToken(
         user_id=user.id,
         token_hash=hash_token(raw_refresh_token),
-        expired_at=datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days),
+        expired_at=datetime.now(timezone.utc) + expires_delta,
+        remember_me=remember_me,
     )
     db.add(refresh_token)
     await db.commit()
@@ -173,9 +179,10 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     if not village_is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
+    remember_me = stored_token.remember_me
     await db.delete(stored_token)
-    access_token, new_raw_refresh_token = await issue_tokens(db, user)
-    return access_token, new_raw_refresh_token
+    access_token, new_raw_refresh_token = await issue_tokens(db, user, remember_me)
+    return access_token, new_raw_refresh_token, remember_me
 
 async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str):
     token_hash = hash_token(raw_refresh_token)

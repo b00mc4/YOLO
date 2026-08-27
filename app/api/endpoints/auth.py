@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from app.api.deps import get_current_user
@@ -40,7 +40,11 @@ _SET_PASSWORD_IP_WINDOW_SECONDS = 10 * 60
 _CONFIRM_EMAIL_CHANGE_IP_LIMIT = 20
 _CONFIRM_EMAIL_CHANGE_IP_WINDOW_SECONDS = 10 * 60
 
-def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
+def _set_refresh_cookie(response: Response, raw_refresh_token: str, remember_me: bool) -> None:
+    cookie_kwargs = {}
+    if remember_me:
+        cookie_kwargs["max_age"] = settings.refresh_token_expire_days * 24 * 60 * 60
+
     response.set_cookie(
         key=auth_service.REFRESH_TOKEN_COOKIE_NAME,
         value=raw_refresh_token,
@@ -48,8 +52,8 @@ def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
         secure=settings.cookie_secure,
         samesite=settings.cookie_samesite,
         domain=settings.cookie_domain,
-        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         path=_REFRESH_COOKIE_PATH,
+        **cookie_kwargs,
     )
 
 def _clear_refresh_cookie(response: Response) -> None:
@@ -69,12 +73,13 @@ async def login(
     request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    remember_me: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
     """Login ธรรมดาทั่วไป"""
-    user = await auth_service.authenticate_user(db, request, form_data.username, form_data.password)
-    access_token, raw_refresh_token = await auth_service.issue_tokens(db, user)
-    _set_refresh_cookie(response, raw_refresh_token)
+    user = await auth_service.authenticate_user(db, request, form_data.username, form_data.password, remember_me)
+    access_token, raw_refresh_token = await auth_service.issue_tokens(db, user, remember_me)
+    _set_refresh_cookie(response, raw_refresh_token, remember_me)
     return LoginResponse(access_token=access_token, user=user)
 
 
@@ -89,8 +94,8 @@ async def refresh(
     if raw_refresh_token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.MISSING_REFRESH_TOKEN)
 
-    access_token, new_raw_refresh_token = await auth_service.rotate_refresh_token(db, raw_refresh_token)
-    _set_refresh_cookie(response, new_raw_refresh_token)
+    access_token, new_raw_refresh_token, remember_me = await auth_service.rotate_refresh_token(db, raw_refresh_token)
+    _set_refresh_cookie(response, new_raw_refresh_token, remember_me)
     return TokenResponse(access_token=access_token)
 
 
