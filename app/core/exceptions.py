@@ -17,6 +17,7 @@ _SQLSTATE_TO_RESPONSE: dict[str, tuple[int, str]] = {
     "23514": (status.HTTP_400_BAD_REQUEST, Common.CONSTRAINT_VIOLATION),
 }
 _DEFAULT_INTEGRITY_RESPONSE = (status.HTTP_500_INTERNAL_SERVER_ERROR, Common.INTERNAL_SERVER_ERROR)
+_PYDANTIC_VALUE_ERROR_TYPE = "value_error"
 
 
 async def integrity_error_handler(request: Request, exc: IntegrityError):
@@ -56,6 +57,10 @@ async def account_locked_handler(request: Request, exc: AccountLocked):
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     messages: list[str] = []
     for err in exc.errors():
+        if err["type"] == _PYDANTIC_VALUE_ERROR_TYPE:
+            messages.append(err["msg"].removeprefix("Value error, "))
+            continue
+
         loc = ".".join(str(part) for part in err["loc"] if part != "body")
         messages.append(f"{loc}: {err['msg']}" if loc else err["msg"])
 

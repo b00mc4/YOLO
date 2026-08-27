@@ -127,6 +127,7 @@ class ValidationErrors:
     PASSWORD_MISMATCH = "รหัสผ่านใหม่และรหัสผ่านยืนยันไม่ตรงกัน"
     SUPERADMIN_NO_VILLAGE = "superadmin ต้องไม่มี village_id"
     VILLAGE_REQUIRED_FOR_ROLE = "ต้องระบุ village_id สำหรับสิทธิ์การใช้งานนี้"
+    PASSWORD_INVALID_CHARACTERS = "รหัสผ่านรองรับเฉพาะตัวอักษรภาษาอังกฤษ ตัวเลข และสัญลักษณ์เท่านั้น"
 
 class DetectionErrors:
     NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"

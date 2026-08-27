@@ -13,6 +13,8 @@ settings = get_settings()
 _password_hasher = PasswordHasher()
 
 _DUMMY_PASSWORD_HASH = _password_hasher.hash(secrets.token_urlsafe(32))
+_ALLOWED_PASSWORD_CHARS = re.compile(r"^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?~]*$")
+
 
 def hash_password(password: str):
     return _password_hasher.hash(password)
@@ -48,6 +50,8 @@ def hash_token(raw_token: str):
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 def validate_password_policy(value: str) -> str:
+    if not _ALLOWED_PASSWORD_CHARS.fullmatch(value):
+        raise ValueError(ValidationErrors.PASSWORD_INVALID_CHARACTERS)
     if len(value) < 8:
         raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
     if len(value) > 36:
