@@ -3,6 +3,9 @@ from collections import deque
 from time import monotonic
 from collections import OrderedDict, deque
 
+PASSWORD_REAUTH_LIMIT = 5
+PASSWORD_REAUTH_WINDOW_SECONDS = 15 * 60
+
 class RateLimitExceeded(Exception):
     def __init__(self, retry_after_seconds: float):
         self.retry_after_seconds = retry_after_seconds
@@ -44,3 +47,6 @@ _rate_limiter = InMemorySingleWorkerRateLimiter()
 
 def get_rate_limiter() -> InMemorySingleWorkerRateLimiter:
     return _rate_limiter
+
+def password_reauth_key(user_id) -> str:
+    return f"password_reauth:{user_id}"

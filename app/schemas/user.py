@@ -8,8 +8,8 @@ from app.models.user import UserRole
 from app.schemas.contact import ContactRead
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=36)
-    fullname: str = Field(max_length=255)
+    username: str = Field(min_length=4, max_length=36)
+    fullname: str = Field(min_length=4, max_length=100)
     email: EmailStr = Field(max_length=255)
     role: UserRole
     village_id: uuid.UUID | None = None
@@ -38,8 +38,9 @@ class UserStatusUpdate(BaseModel):
 
 
 class AdminResetPasswordRequest(BaseModel):
-    new_password: str = Field(max_length=128)
-    confirm_new_password: str = Field(max_length=128)
+    new_password: str = Field(max_length=36)
+    confirm_new_password: str = Field(max_length=36)
+
 
     @field_validator("new_password")
     @classmethod
@@ -119,7 +120,7 @@ class LockedAccountEntry(BaseModel):
     unlocked_at: datetime
 
 class UserFullnameUpdate(BaseModel):
-    fullname: str = Field(max_length=255)
+    fullname: str = Field(min_length=4, max_length=100)
 
     @field_validator("fullname")
     @classmethod

@@ -50,8 +50,12 @@ def hash_token(raw_token: str):
 def validate_password_policy(value: str) -> str:
     if len(value) < 8:
         raise ValueError(ValidationErrors.PASSWORD_MIN_LENGTH)
+    if len(value) > 36:
+        raise ValueError(ValidationErrors.PASSWORD_MAX_LENGTH)
     if not re.search(r"[A-Za-z]", value):
         raise ValueError(ValidationErrors.PASSWORD_NEED_LETTER)
     if not re.search(r"\d", value):
         raise ValueError(ValidationErrors.PASSWORD_NEED_DIGIT)
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?~]", value):
+        raise ValueError(ValidationErrors.PASSWORD_NEED_SYMBOL)
     return value

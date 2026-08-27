@@ -122,6 +122,8 @@ class ValidationErrors:
     PASSWORD_MIN_LENGTH = "รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร"
     PASSWORD_NEED_LETTER = "รหัสผ่านต้องมีตัวอักษรอย่างน้อย 1 ตัว"
     PASSWORD_NEED_DIGIT = "รหัสผ่านต้องมีตัวเลขอย่างน้อย 1 ตัว"
+    PASSWORD_MAX_LENGTH = "รหัสผ่านต้องมีความยาวไม่เกิน 36 ตัวอักษร"
+    PASSWORD_NEED_SYMBOL = "รหัสผ่านต้องมีอักขระพิเศษอย่างน้อย 1 ตัว"
     PASSWORD_MISMATCH = "รหัสผ่านใหม่และรหัสผ่านยืนยันไม่ตรงกัน"
     SUPERADMIN_NO_VILLAGE = "superadmin ต้องไม่มี village_id"
     VILLAGE_REQUIRED_FOR_ROLE = "ต้องระบุ village_id สำหรับสิทธิ์การใช้งานนี้"

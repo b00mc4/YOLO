@@ -31,6 +31,11 @@ _LOGIN_IP_WINDOW_SECONDS = 60
 _FORGOT_PASSWORD_IP_LIMIT = 20
 _FORGOT_PASSWORD_IP_WINDOW_SECONDS = 60 * 60
 
+_SET_PASSWORD_IP_LIMIT = 20
+_SET_PASSWORD_IP_WINDOW_SECONDS = 10 * 60
+_CONFIRM_EMAIL_CHANGE_IP_LIMIT = 20
+_CONFIRM_EMAIL_CHANGE_IP_WINDOW_SECONDS = 10 * 60
+
 def _set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
     response.set_cookie(
         key=auth_service.REFRESH_TOKEN_COOKIE_NAME,
@@ -112,7 +117,11 @@ async def forgot_password(
 ):
     await auth_service.request_password_reset(db, background_tasks, payload.email)
 
-@router.post("/set-password", response_model=SetPasswordResponse)
+@router.post(
+    "/set-password",
+    response_model=SetPasswordResponse,
+    dependencies=[Depends(rate_limit_by_ip("set_password", _SET_PASSWORD_IP_LIMIT, _SET_PASSWORD_IP_WINDOW_SECONDS))],
+)
 async def set_password(
     payload: SetPasswordRequest,
     db: AsyncSession = Depends(get_db),
@@ -125,7 +134,11 @@ async def set_password(
     )
 
 
-@router.post("/confirm-email-change", response_model=EmailChangeConfirmResponse)
+@router.post(
+    "/confirm-email-change",
+    response_model=EmailChangeConfirmResponse,
+    dependencies=[Depends(rate_limit_by_ip("confirm_email_change", _CONFIRM_EMAIL_CHANGE_IP_LIMIT, _CONFIRM_EMAIL_CHANGE_IP_WINDOW_SECONDS))],
+)
 async def confirm_email_change(
     payload: EmailChangeConfirm,
     request: Request,

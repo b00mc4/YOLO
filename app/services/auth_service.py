@@ -20,7 +20,7 @@ from app.models.verify import Verify, VerifyType
 from app.services import audit_service, email_service, login_security_service
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.core.rate_limit import get_rate_limiter
+from app.core.rate_limit import get_rate_limiter, password_reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS
 from app.core.account_lockout import AccountLocked, get_account_locker
 from app.core.error_messages import Auth, UserErrors
 
@@ -196,8 +196,13 @@ async def change_password(
     logout_all_sessions: bool,
     current_raw_refresh_token: str | None,
 ) -> None:
+    reauth_key = password_reauth_key(current_user.id)
+    get_rate_limiter().check(reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS)
+
     if current_user.hashpassword is None or not verify_password(current_password, current_user.hashpassword):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
+
+    get_rate_limiter().reset(reauth_key)
 
     current_user.hashpassword = hash_password(new_password)
 
