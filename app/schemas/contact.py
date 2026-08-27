@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.contact import ContactType
 from app.models.user import UserRole
+from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import ContactErrors
 
 def _normalize_content_type(value):
@@ -25,8 +26,8 @@ class ContactCreate(BaseModel):
 
     @field_validator("value")
     @classmethod
-    def normalize_value(cls, v: str) -> str:
-        return v.strip().lower()
+    def strip_value(cls, v: str) -> str:
+        return v.strip()
 
     @field_validator("custom_label")
     @classmethod
@@ -42,6 +43,11 @@ class ContactCreate(BaseModel):
             raise ValueError(ContactErrors.CUSTOM_LABEL_NOT_ALLOWED)
         return self
 
+    @model_validator(mode="after")
+    def normalize_value_format(self) -> ContactCreate:
+        self.value = normalize_and_validate_contact_value(self.content_type, self.value)
+        return self
+
 
 class ContactUpdate(BaseModel):
     content_type: ContactType | None = None
@@ -55,8 +61,8 @@ class ContactUpdate(BaseModel):
 
     @field_validator("value")
     @classmethod
-    def normalize_value(cls, v: str | None) -> str | None:
-        return v.strip().lower() if v is not None else v
+    def strip_value(cls, v: str | None) -> str | None:
+        return v.strip() if v is not None else v
 
     @field_validator("custom_label")
     @classmethod

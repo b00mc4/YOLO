@@ -62,6 +62,11 @@ class ContactErrors:
     DIRECTORY_ACCESS_DENIED = "ไม่มีสิทธิ์เข้าถึงข้อมูลของผู้ใช้งานนี้"
     CUSTOM_LABEL_REQUIRED = "ต้องระบุ custom_label เมื่อ content_type เป็น 'other'"
     CUSTOM_LABEL_NOT_ALLOWED = "ไม่สามารถระบุ custom_label ได้ ยกเว้น content_type เป็น 'other'"
+    DUPLICATE_CONTENT_TYPE = "ผู้ใช้งานมีข้อมูลการติดต่อประเภทนี้อยู่แล้ว"
+    INVALID_PHONE_FORMAT = "เบอร์โทรศัพท์ต้องมีความยาว 12 ตัวอักษร ประกอบด้วยตัวเลข 0-9 และเครื่องหมาย - เท่านั้น"
+    INVALID_LINE_FORMAT = "Line ID ต้องมีความยาว 4-20 ตัวอักษร ใช้ได้เฉพาะตัวพิมพ์เล็ก a-z ตัวเลข 0-9 จุด ขีดกลาง และขีดล่างเท่านั้น"
+    INVALID_FACEBOOK_FORMAT = "Facebook ต้องมีความยาวไม่เกิน 50 ตัวอักษร"
+    INVALID_INSTAGRAM_FORMAT = "Instagram ต้องมีความยาว 1-30 ตัวอักษร ใช้ได้เฉพาะตัวอักษรภาษาอังกฤษ a-z ตัวเลข 0-9 จุด และขีดล่างเท่านั้น"
 
     @staticmethod
     def max_contacts_reached(limit: int) -> str:

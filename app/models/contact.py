@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -21,6 +21,15 @@ class ContactType(str, enum.Enum):
 
 class Contact(Base):
     __tablename__ = "ContactTABLE"
+    __table_args__ = (
+        Index(
+            "ix_contacttable_user_content_type_unique",
+            "user_id",
+            "content_type",
+            unique=True,
+            postgresql_where=text("content_type != 'other'"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id", ondelete="CASCADE"), nullable=False, index=True)

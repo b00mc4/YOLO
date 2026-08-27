@@ -15,9 +15,10 @@ from app.schemas.contact import (
     UserContactsDetail,
 )
 from app.services import audit_service
+from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import Common, ContactErrors, UserErrors
 
-_MAX_CONTACTS_PER_USER = 10
+_MAX_CONTACTS_PER_USER = 5
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -125,6 +126,30 @@ def _validate_content_type_consistency(content_type: ContactType, custom_label: 
         )
 
 
+async def _check_duplicate_content_type(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    content_type: ContactType,
+    exclude_contact_id: uuid.UUID | None = None,
+) -> None:
+    if content_type == ContactType.OTHER:
+        return
+
+    stmt = select(Contact.id).where(
+        Contact.user_id == user_id,
+        Contact.content_type == content_type,
+    )
+    if exclude_contact_id is not None:
+        stmt = stmt.where(Contact.id != exclude_contact_id)
+
+    result = await db.execute(stmt.limit(1))
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ContactErrors.DUPLICATE_CONTENT_TYPE,
+        )
+
+
 async def create_contact(
     db: AsyncSession,
     request: Request,
@@ -132,6 +157,8 @@ async def create_contact(
     payload: ContactCreate,
 ) -> ContactRead:
     target_user = await _resolve_target_user(db, current_user, payload.user_id)
+
+    await _check_duplicate_content_type(db, target_user.id, payload.content_type)
 
     count_result = await db.execute(
         select(func.count()).select_from(Contact).where(Contact.user_id == target_user.id)
@@ -276,6 +303,20 @@ async def update_contact(
     _verify_contact_write_scope(current_user, contact, owner)
 
     update_data = payload.model_dump(exclude_unset=True)
+    merged_content_type = update_data.get("content_type", contact.content_type)
+
+    if "content_type" in update_data:
+        await _check_duplicate_content_type(
+            db, owner.id, merged_content_type, exclude_contact_id=contact.id
+        )
+
+    if "content_type" in update_data or "value" in update_data:
+        merged_value = update_data.get("value", contact.value)
+        try:
+            update_data["value"] = normalize_and_validate_contact_value(merged_content_type, merged_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     for field, value in update_data.items():
         setattr(contact, field, value)
 
