@@ -324,7 +324,8 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
     user.hashpassword = hash_password(new_password)
     user.is_verify = True
     verify_entry.used = True
-
+    token_hash = hash_token(raw_token)
+    
     await invalidate_pending_verify_tokens(
         db, user.id, verify_entry.type, exclude_token_hash=token_hash
     )
