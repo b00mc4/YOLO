@@ -59,6 +59,7 @@ def _to_car_read(car: Car, request: Request) -> CarRead:
         id=car.id,
         event_id=car.event_id,
         camera_id=car.camera_id,
+        camera_name=car.camera_name,
         license_plate=car.license_plate,
         province=car.province,
         color=car.color,
