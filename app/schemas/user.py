@@ -8,8 +8,8 @@ from app.models.user import UserRole
 from app.schemas.contact import ContactRead
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=4, max_length=36)
-    fullname: str = Field(min_length=4, max_length=100)
+    username: str = Field(max_length=36)
+    fullname: str = Field(max_length=100)
     email: EmailStr = Field(max_length=255)
     role: UserRole
     village_id: uuid.UUID | None = None
@@ -18,6 +18,25 @@ class UserCreate(BaseModel):
     @classmethod
     def normalize_username(cls, v: str) -> str:
         return v.strip().lower()
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        if len(v) < 4:
+            raise ValueError("ชื่อผู้ใช้งานต้องมีความยาวอย่างน้อย 4 ตัวอักษร")
+        if len(v) > 36:
+            raise ValueError("ชื่อผู้ใช้งานต้องมีความยาวไม่เกิน 36 ตัวอักษร")
+        return v
+
+    @field_validator("fullname")
+    @classmethod
+    def validate_fullname(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 4:
+            raise ValueError("ชื่อ-นามสกุลต้องมีความยาวอย่างน้อย 4 ตัวอักษร")
+        if len(v) > 100:
+            raise ValueError("ชื่อ-นามสกุลต้องมีความยาวไม่เกิน 100 ตัวอักษร")
+        return v
 
     @field_validator("email")
     @classmethod

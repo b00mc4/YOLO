@@ -32,6 +32,10 @@ _REFRESH_COOKIE_PATH = "/api/auth"
 
 _LOGIN_IP_LIMIT = 10
 _LOGIN_IP_WINDOW_SECONDS = 60
+_REFRESH_IP_LIMIT = 30
+_REFRESH_IP_WINDOW_SECONDS = 60
+_LOGOUT_IP_LIMIT = 20
+_LOGOUT_IP_WINDOW_SECONDS = 60
 _FORGOT_PASSWORD_IP_LIMIT = 20
 _FORGOT_PASSWORD_IP_WINDOW_SECONDS = 60 * 60
 
@@ -83,7 +87,11 @@ async def login(
     return LoginResponse(access_token=access_token, user=user)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit_by_ip("refresh", _REFRESH_IP_LIMIT, _REFRESH_IP_WINDOW_SECONDS))],
+)
 async def refresh(
     request: Request,
     response: Response,
@@ -99,7 +107,11 @@ async def refresh(
     return TokenResponse(access_token=access_token)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post(
+    "/logout",
+    response_model=MessageResponse,
+    dependencies=[Depends(rate_limit_by_ip("logout", _LOGOUT_IP_LIMIT, _LOGOUT_IP_WINDOW_SECONDS))],
+)
 async def logout(
     request: Request,
     response: Response,
