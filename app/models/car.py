@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, false
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, false
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -14,7 +14,11 @@ class Car(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(UUID(as_uuid=True), nullable=False,unique=True, index=True)
-    camera_id = Column(UUID(as_uuid=True), ForeignKey("CameraTABLE.id") ,nullable=False, index=True)
+    camera_id = Column(UUID(as_uuid=True), ForeignKey("CameraTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
+    village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
+    camera_name = Column(String(255), nullable=True)
+    camera_lat = Column(Float(53), nullable=True)
+    camera_long = Column(Float(53), nullable=True)
     license_plate = Column(String(255), nullable=False, index=True)
     province = Column(String(255), nullable=False)
     color = Column(String(255), nullable=False)

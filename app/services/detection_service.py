@@ -95,10 +95,11 @@ def _to_car_detail_read(car: Car, camera: Camera, village: Group, request: Reque
         direction=car.direction,
         created_at=car.created_at,
         camera=CameraSummary(
-            id=camera.id,
-            name=camera.name,
-            village_id=village.id,
-            village_name=village.name,
+            id=camera.id if camera is not None else None,
+            name=camera.name if camera is not None else car.camera_name,
+            village_id=car.village_id,
+            village_name=village.name if village is not None else None,
+            is_camera_deleted=camera is None,
         ),
     )
 
@@ -305,6 +306,10 @@ async def create_detection(
         id=car_id,
         event_id=payload.event_id,
         camera_id=camera.id,
+        village_id=camera.village_id,
+        camera_name=camera.name,
+        camera_lat=camera.lat,
+        camera_long=camera.long,
         license_plate=payload.license_plate,
         province=payload.province,
         color=payload.color,
@@ -406,7 +411,7 @@ async def list_detections(
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
     scope_filters = _build_detection_list_scope_filters(current_user, village_id)
-    stmt = select(Car).join(Camera, Car.camera_id == Camera.id).where(*scope_filters)
+    stmt = select(Car).where(*scope_filters)
 
     if camera_id is not None:
         stmt = stmt.where(Car.camera_id == camera_id)
@@ -454,17 +459,15 @@ async def get_detection_detail(
 ) -> CarDetailRead:
     result = await db.execute(
         select(Car, Camera, Group)
-        .join(Camera, Car.camera_id == Camera.id)
-        .join(Group, Camera.village_id == Group.id)
+        .outerjoin(Camera, Car.camera_id == Camera.id)
+        .outerjoin(Group, Car.village_id == Group.id)
         .where(Car.id == detection_id)
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DetectionErrors.NOT_FOUND)
-
+        raise HTTPException(...)
     car, camera, village = row
-    verify_village_scope(current_user, camera.village_id)
-
+    verify_village_scope(current_user, car.village_id)
     return _to_car_detail_read(car, camera, village, request)
 
 
@@ -474,17 +477,11 @@ async def get_detection_image_path(
     detection_id: uuid.UUID,
     variant: str,
 ) -> tuple[Path, str]:
-    result = await db.execute(
-        select(Car, Camera.village_id)
-        .join(Camera, Car.camera_id == Camera.id)
-        .where(Car.id == detection_id)
-    )
-    row = result.first()
-    if row is None:
+    result = await db.execute(select(Car).where(Car.id == detection_id))
+    car = result.scalar_one_or_none()
+    if car is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=DetectionErrors.NOT_FOUND)
-
-    car, village_id = row
-    verify_village_scope(current_user, village_id)
+    verify_village_scope(current_user, car.village_id)
 
     relative_path = car.image_crop if variant == "crop" else car.image_full
     absolute_path = storage_service.resolve_storage_path(relative_path)
@@ -768,8 +765,8 @@ async def get_route_tracking(
 
     detail_result = await db.execute(
         select(Car, Camera, Group)
-        .join(Camera, Car.camera_id == Camera.id)
-        .join(Group, Camera.village_id == Group.id)
+        .outerjoin(Camera, Car.camera_id == Camera.id)
+        .outerjoin(Group, Car.village_id == Group.id)
         .where(*filters, bangkok_date_expr.in_(page_dates))
         .order_by(Car.time_detect.asc())
     )
@@ -789,12 +786,13 @@ async def get_route_tracking(
             entries = [
                 RouteTrackingDetectionEntry(
                     detection_id=car.id,
-                    camera_id=camera.id,
-                    camera_name=camera.name,
-                    village_id=village.id,
-                    village_name=village.name,
-                    lat=camera.lat,
-                    long=camera.long,
+                    camera_id=camera.id if camera is not None else None,
+                    camera_name=camera.name if camera is not None else car.camera_name,
+                    village_id=car.village_id,
+                    village_name=village.name if village is not None else "-",
+                    lat=camera.lat if camera is not None else car.camera_lat,
+                    long=camera.long if camera is not None else car.camera_long,
+                    is_camera_deleted=camera is None,
                     direction=car.direction,
                     time_detect=car.time_detect,
                     color=car.color,

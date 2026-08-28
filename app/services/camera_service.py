@@ -11,7 +11,6 @@ from app.core.config import get_settings
 from app.core.rate_limit import get_rate_limiter
 from app.db.session import async_session_maker
 from app.models.camera import Camera, CameraDirection, CameraVerificationStatus
-from app.models.car import Car
 from app.models.group import Group
 from app.models.user import User, UserRole
 from app.schemas.camera import (
@@ -144,16 +143,19 @@ async def _sync_camera_create(
         await _notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
 
 
-async def _sync_camera_delete(camera_id: uuid.UUID, village_id: uuid.UUID, camera_name: str) -> None:
-    mediamtx_ok, ai_vision_ok = await asyncio.gather(
+async def _sync_camera_delete(camera_id, village_id, camera_name):
+    mediamtx_ok, ai_vision_result = await asyncio.gather(
         mediamtx_service.remove_path(camera_id),
-        ai_vision_service.notify_camera_deleted(camera_id),
+        ai_vision_service.delete_camera(camera_id),
     )
 
     failed_services = []
     if not mediamtx_ok:
         failed_services.append("mediamtx")
-    if not ai_vision_ok:
+    if ai_vision_result not in (
+        ai_vision_service.CameraDeleteResult.DELETED,
+        ai_vision_service.CameraDeleteResult.NOT_FOUND,
+    ):
         failed_services.append("ai_vision")
 
     if failed_services:
@@ -408,45 +410,24 @@ async def update_camera(
 
     return _to_camera_read(camera)
 
-async def delete_camera(
-    db: AsyncSession,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    current_user: User,
-    camera_id: uuid.UUID,
-) -> None:
+async def delete_camera(db, request, background_tasks, current_user, camera_id):
     camera = await get_camera(db, current_user, camera_id)
-
-    detection_count_result = await db.execute(
-        select(func.count()).select_from(Car).where(Car.camera_id == camera_id)
-    )
-    if detection_count_result.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(CameraErrors.DELETE_HAS_DETECTIONS),
-        )
-
-    if camera.ai_vision_synced_at is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(CameraErrors.DELETE_ALREADY_LINKED),
-        )
 
     camera_id_value = camera.id
     village_id = camera.village_id
     camera_name = camera.name
 
     await audit_service.log_action(
-        db,
-        request,
-        action="camera_deleted",
-        detail=f"camera deleted: {camera.name}",
-        user_id=current_user.id,
-        village_id=camera.village_id,
+        db, request, action="camera_deleted",
+        detail=f"camera permanently deleted: {camera.name} (detection history retained via snapshot)",
+        user_id=current_user.id, village_id=camera.village_id,
     )
 
     await db.delete(camera)
     await db.commit()
+
+    camera_verification_service.cancel_verification(camera_id_value)
+    background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
     camera_verification_service.cancel_verification(camera_id_value)
     background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)

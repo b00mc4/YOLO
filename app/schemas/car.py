@@ -40,6 +40,7 @@ class CarRead(BaseModel):
     id: uuid.UUID
     event_id: uuid.UUID
     camera_id: uuid.UUID
+    camera_name: str | None
     license_plate: str
     province: str
     color: str
@@ -53,10 +54,11 @@ class CarRead(BaseModel):
 
 
 class CameraSummary(BaseModel):
-    id: uuid.UUID
+    id: uuid.UUID | None
     name: str
     village_id: uuid.UUID
-    village_name: str
+    village_name: str | None = None
+    is_camera_deleted: bool
 
 
 class CarDetailRead(BaseModel):

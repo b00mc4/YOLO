@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.camera import Camera, CameraDirection
+from app.models.camera import CameraDirection
 from app.models.car import Car
 from app.models.user import User, UserRole
 from app.schemas.car import RepeatedPlateEntry
@@ -34,7 +34,6 @@ async def _count_whitelist(db: AsyncSession, base_filters: list) -> int:
     result = await db.execute(
         select(func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters, Car.is_whitelist.is_(True))
     )
     return result.scalar_one()
@@ -48,7 +47,7 @@ def _bangkok_single_day_bounds(target_date: date) -> tuple[datetime, datetime]:
 def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID | None) -> list:
     if current_user.role == UserRole.SUPERADMIN:
         if village_id_filter is not None:
-            return [Camera.village_id == village_id_filter]
+            return [Car.village_id == village_id_filter]
         return []
 
     if village_id_filter is not None and village_id_filter != current_user.village_id:
@@ -56,14 +55,13 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
             status_code=status.HTTP_403_FORBIDDEN,
             detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
-    return [Camera.village_id == current_user.village_id]
+    return [Car.village_id == current_user.village_id]
 
 
 async def _count_total(db: AsyncSession, base_filters: list) -> int:
     result = await db.execute(
         select(func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
     )
     return result.scalar_one()
@@ -72,7 +70,6 @@ async def _count_total(db: AsyncSession, base_filters: list) -> int:
 async def _count_unique_plates(db: AsyncSession, base_filters: list) -> int:
     unique_subquery = (
         select(Car.license_plate, Car.province)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .distinct()
         .subquery()
@@ -85,7 +82,6 @@ async def _count_blacklist(db: AsyncSession, base_filters: list) -> int:
     result = await db.execute(
         select(func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters, Car.is_blacklist.is_(True))
     )
     return result.scalar_one()
@@ -95,7 +91,6 @@ async def _count_by_direction(db: AsyncSession, base_filters: list, direction: C
     result = await db.execute(
         select(func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters, Car.direction == direction)
     )
     return result.scalar_one()
@@ -104,7 +99,6 @@ async def _count_by_direction(db: AsyncSession, base_filters: list, direction: C
 async def _top_repeated_plates(db: AsyncSession, base_filters: list) -> list[RepeatedPlateEntry]:
     result = await db.execute(
         select(Car.license_plate, Car.province, func.count())
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .group_by(Car.license_plate, Car.province)
         .having(func.count() > 1)
@@ -125,7 +119,6 @@ async def _hourly_buckets(db: AsyncSession, base_filters: list) -> list[HourlyBu
     result = await db.execute(
         select(bangkok_hour.label("hour"), func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .group_by(bangkok_hour)
     )
