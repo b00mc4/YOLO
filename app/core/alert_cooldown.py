@@ -21,7 +21,9 @@ class InMemorySingleWorkerCooldown:
 
         self._last_hit.move_to_end(key)
         within_cooldown = now - last_hit_at < cooldown_seconds
-        self._last_hit[key] = now
+        
+        if not within_cooldown:
+            self._last_hit[key] = now
 
         return not within_cooldown
 

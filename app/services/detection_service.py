@@ -467,7 +467,7 @@ async def get_detection_detail(
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(...)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบข้อมูลการตรวจจับ")
     car, camera, village = row
     verify_village_scope(current_user, car.village_id)
     return _to_car_detail_read(car, camera, village, request)
@@ -515,7 +515,7 @@ def _build_detection_list_scope_filters(
 ) -> list:
     if current_user.role == UserRole.SUPERADMIN:
         if village_id_filter is not None:
-            return [Camera.village_id == village_id_filter]
+            return [Car.village_id == village_id_filter]
         return []
 
     if village_id_filter is not None and village_id_filter != current_user.village_id:
@@ -523,7 +523,7 @@ def _build_detection_list_scope_filters(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
-    return [Camera.village_id == current_user.village_id]
+    return [Car.village_id == current_user.village_id]
 
 
 async def get_today_dashboard(
@@ -579,13 +579,11 @@ async def get_today_dashboard(
         .limit(latest_limit)
     )
 
-    # --- execute 4 queries in parallel via asyncio.gather ---
-    agg_result, unique_result, top_repeated_result, latest_result = await asyncio.gather(
-        db.execute(agg_query),
-        db.execute(unique_plates_sub),
-        db.execute(top_repeated_query),
-        db.execute(latest_query),
-    )
+    # --- execute 4 queries sequentially to prevent MissingGreenlet ---
+    agg_result = await db.execute(agg_query)
+    unique_result = await db.execute(unique_plates_sub)
+    top_repeated_result = await db.execute(top_repeated_query)
+    latest_result = await db.execute(latest_query)
 
     row = agg_result.one()
     unique_plates_today = unique_result.scalar_one()

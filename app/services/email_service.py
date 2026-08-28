@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging
 from email.message import EmailMessage
+import html
 from time import monotonic
 import aiosmtplib
 from app.core.config import get_settings
@@ -184,10 +185,10 @@ def _render_blacklist_alert_html(
               <td style="padding:32px;">
                 <h1 style="margin:0 0 16px 0;font-size:20px;color:#b91c1c;">พบรถในบัญชีดำ</h1>
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#374151;">
-                  <tr><td style="padding:4px 0;color:#6b7280;">ทะเบียน</td><td style="padding:4px 0;font-weight:600;">{license_plate}</td></tr>
-                  <tr><td style="padding:4px 0;color:#6b7280;">จังหวัด</td><td style="padding:4px 0;font-weight:600;">{province}</td></tr>
-                  <tr><td style="padding:4px 0;color:#6b7280;">กล้อง</td><td style="padding:4px 0;font-weight:600;">{camera_name}</td></tr>
-                  <tr><td style="padding:4px 0;color:#6b7280;">เวลา</td><td style="padding:4px 0;font-weight:600;">{detected_at_local}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">ทะเบียน</td><td style="padding:4px 0;font-weight:600;">{html.escape(license_plate)}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">จังหวัด</td><td style="padding:4px 0;font-weight:600;">{html.escape(province)}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">กล้อง</td><td style="padding:4px 0;font-weight:600;">{html.escape(camera_name)}</td></tr>
+                  <tr><td style="padding:4px 0;color:#6b7280;">เวลา</td><td style="padding:4px 0;font-weight:600;">{html.escape(detected_at_local)}</td></tr>
                 </table>
               </td>
             </tr>

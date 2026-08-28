@@ -43,7 +43,8 @@ async def _startup_camera_resync_background() -> None:
                 attempt, _STARTUP_RESYNC_MAX_ATTEMPTS,
             )
 
-        await asyncio.sleep(_STARTUP_RESYNC_BACKOFF_BASE_SECONDS ** attempt)
+        if attempt < _STARTUP_RESYNC_MAX_ATTEMPTS:
+            await asyncio.sleep(_STARTUP_RESYNC_BACKOFF_BASE_SECONDS ** attempt)
 
     logger.error(
         "Startup camera resync gave up after %s attempts; "

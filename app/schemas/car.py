@@ -56,7 +56,7 @@ class CarRead(BaseModel):
 class CameraSummary(BaseModel):
     id: uuid.UUID | None
     name: str
-    village_id: uuid.UUID
+    village_id: uuid.UUID | None = None
     village_name: str | None = None
     is_camera_deleted: bool
 

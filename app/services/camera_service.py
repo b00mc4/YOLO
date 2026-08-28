@@ -429,9 +429,6 @@ async def delete_camera(db, request, background_tasks, current_user, camera_id):
     camera_verification_service.cancel_verification(camera_id_value)
     background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
 
-    camera_verification_service.cancel_verification(camera_id_value)
-    background_tasks.add_task(_sync_camera_delete, camera_id_value, village_id, camera_name)
-
 
 def _build_resync_scope_filters(
     current_user: User, village_id_filter: uuid.UUID | None

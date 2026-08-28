@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, verify_api_key
 from app.db.session import get_db
 from app.models.camera import CameraDirection
 from app.models.user import User
@@ -107,6 +107,7 @@ async def _handle_real_detection(
     "",
     response_model=DetectionCreateAck,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_api_key)],
 )
 async def create_detection(
     request: Request,

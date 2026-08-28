@@ -517,6 +517,9 @@ async def delete_user(
     _verify_user_write_scope(current_user, target)
     await _verify_hard_delete_eligible(db, target)
 
+    if target.avatar_path:
+        await storage_service.delete_image(target.avatar_path)
+
     await audit_service.log_action(
         db,
         request,
@@ -628,10 +631,10 @@ async def request_email_change(
     ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
 
-    get_rate_limiter().reset(reauth_key)
-    
     if payload.new_email == target.email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=UserErrors.EMAIL_SAME_AS_CURRENT)
+
+    get_rate_limiter().reset(reauth_key)
 
     existing_email_result = await db.execute(select(User.id).where(User.email == payload.new_email))
     if existing_email_result.scalar_one_or_none() is not None:

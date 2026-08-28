@@ -75,7 +75,10 @@ async def get_current_user(
             headers=_UNAUTHORIZED_HEADERS,
         )
 
-    if issued_at < user.password_changed_at:
+    pca = user.password_changed_at
+    if pca.tzinfo is None:
+        pca = pca.replace(tzinfo=timezone.utc)
+    if issued_at < pca:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=Auth.SESSION_REVOKED_PASSWORD_CHANGED,

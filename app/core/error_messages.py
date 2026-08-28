@@ -150,6 +150,7 @@ class CameraErrors:
     SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
     STREAM_UNAVAILABLE_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถขอลิงก์สตรีมได้"
     CANNOT_CREATE_VILLAGE_INACTIVE = "หมู่บ้านนี้ถูกปิดการใช้งาน ไม่สามารถเพิ่มกล้องได้ กรุณาเปิดใช้งานหมู่บ้านก่อน"
+    INVALID_RTSP_FORMAT = "รูปแบบ URL ของสตรีม (RTSP) ไม่ถูกต้อง"
 
 class AvatarErrors:
     NOT_SET = "ผู้ใช้งานนี้ยังไม่ได้ตั้งรูปโปรไฟล์"

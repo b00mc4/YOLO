@@ -222,7 +222,6 @@ async def change_password(
         village_id=current_user.village_id,
     )
     await db.commit()
-    await db.commit()
 
 
 async def create_verify_token(
