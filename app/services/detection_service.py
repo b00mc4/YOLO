@@ -1,11 +1,12 @@
 from __future__ import annotations
+import asyncio
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import BackgroundTasks, HTTPException, Request, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import verify_village_scope
@@ -536,57 +537,31 @@ async def get_today_dashboard(
     scope_filters = _build_dashboard_scope_filters(current_user, village_id)
     base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
 
-    total_result = await db.execute(
+    # --- single aggregated counts query (replaces 6 separate queries) ---
+    unique_plates_sub = (
         select(func.count())
+        .select_from(
+            select(Car.license_plate, Car.province)
+            .join(Camera, Car.camera_id == Camera.id)
+            .where(*base_filters)
+            .distinct()
+            .subquery()
+        )
+    )
+    agg_query = (
+        select(
+            func.count().label("total"),
+            func.count(case((Car.is_blacklist.is_(True), 1))).label("blacklist"),
+            func.count(case((Car.is_whitelist.is_(True), 1))).label("whitelist"),
+            func.count(case((Car.direction == CameraDirection.ENTRY, 1))).label("entry"),
+            func.count(case((Car.direction == CameraDirection.EXIT, 1))).label("exit"),
+        )
         .select_from(Car)
         .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
     )
-    total_detections_today = total_result.scalar_one()
 
-    unique_subquery = (
-        select(Car.license_plate, Car.province)
-        .join(Camera, Car.camera_id == Camera.id)
-        .where(*base_filters)
-        .distinct()
-        .subquery()
-    )
-    unique_result = await db.execute(select(func.count()).select_from(unique_subquery))
-    unique_plates_today = unique_result.scalar_one()
-
-    blacklist_result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
-        .where(*base_filters, Car.is_blacklist.is_(True))
-    )
-    blacklist_detections_today = blacklist_result.scalar_one()
-
-    whitelist_result = await db.execute(
-    select(func.count())
-    .select_from(Car)
-    .join(Camera, Car.camera_id == Camera.id)
-    .where(*base_filters, Car.is_whitelist.is_(True))
-)
-    whitelist_detections_today = whitelist_result.scalar_one()
-
-    entry_result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
-        .where(*base_filters, Car.direction == CameraDirection.ENTRY)
-    )
-    entry_detections_today = entry_result.scalar_one()
-
-    exit_result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
-        .where(*base_filters, Car.direction == CameraDirection.EXIT)
-    )
-    exit_detections_today = exit_result.scalar_one()
-
-    top_repeated_result = await db.execute(
+    top_repeated_query = (
         select(Car.license_plate, Car.province, func.count())
         .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
@@ -595,28 +570,40 @@ async def get_today_dashboard(
         .order_by(func.count().desc())
         .limit(10)
     )
-    top_repeated_plates = [
-        RepeatedPlateEntry(license_plate=plate, province=province, count=count)
-        for plate, province, count in top_repeated_result.all()
-    ]
 
-    latest_result = await db.execute(
+    latest_query = (
         select(Car)
         .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .order_by(Car.time_detect.desc())
         .limit(latest_limit)
     )
+
+    # --- execute 4 queries in parallel via asyncio.gather ---
+    agg_result, unique_result, top_repeated_result, latest_result = await asyncio.gather(
+        db.execute(agg_query),
+        db.execute(unique_plates_sub),
+        db.execute(top_repeated_query),
+        db.execute(latest_query),
+    )
+
+    row = agg_result.one()
+    unique_plates_today = unique_result.scalar_one()
+
+    top_repeated_plates = [
+        RepeatedPlateEntry(license_plate=plate, province=province, count=count)
+        for plate, province, count in top_repeated_result.all()
+    ]
     latest_detections = [_to_car_read(item, request) for item in latest_result.scalars().all()]
 
     return DetectionDashboardRead(
         date=start_of_day_bangkok.date(),
-        total_detections_today=total_detections_today,
+        total_detections_today=row.total,
         unique_plates_today=unique_plates_today,
-        blacklist_detections_today=blacklist_detections_today,
-        whitelist_detections_today=whitelist_detections_today,
-        entry_detections_today=entry_detections_today,
-        exit_detections_today=exit_detections_today,
+        blacklist_detections_today=row.blacklist,
+        whitelist_detections_today=row.whitelist,
+        entry_detections_today=row.entry,
+        exit_detections_today=row.exit,
         top_repeated_plates=top_repeated_plates,
         latest_detections=latest_detections,
     )

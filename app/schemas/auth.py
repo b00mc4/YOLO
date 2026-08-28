@@ -21,6 +21,12 @@ class SetPasswordRequest(BaseModel):
     def validate_new_password(cls, v: str) -> str:
         return validate_password_policy(v)
 
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> SetPasswordRequest:
+        if self.new_password != self.confirm_new_password:
+            raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
+        return self
+
 class SetPasswordResponse(BaseModel):
     detail: str
     username: str

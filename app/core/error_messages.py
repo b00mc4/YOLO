@@ -96,6 +96,7 @@ class DetectionErrors:
 
 class StorageErrors:
     INVALID_IMAGE = "ไฟล์รูปภาพไม่ถูกต้องหรือเสียหาย"
+    INVALID_PATH = "เส้นทางไฟล์ไม่ถูกต้อง"
 
     @staticmethod
     def unsupported_image_content_type(content_type: str | None) -> str:

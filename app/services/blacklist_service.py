@@ -2,7 +2,6 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from fastapi.concurrency import run_in_threadpool
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -266,8 +265,7 @@ async def handle_blacklist_detection(
     detected_at_local = time_detect.astimezone(BANGKOK_TZ).strftime("%d/%m/%Y %H:%M:%S")
 
     try:
-        failed_recipients = await run_in_threadpool(
-            email_service.send_blacklist_alert_email,
+        failed_recipients = await email_service.send_blacklist_alert_email(
             recipients,
             camera_name,
             license_plate,

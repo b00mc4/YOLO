@@ -1,8 +1,8 @@
 from __future__ import annotations
 import logging
-import smtplib
 from email.message import EmailMessage
 from time import monotonic
+import aiosmtplib
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -65,7 +65,7 @@ def _render_email_html(heading: str, message_text: str, button_text: str, button
 </html>"""
 
 
-def _send_email(to_email: str, subject: str, text_body: str, html_body: str) -> None:
+async def _send_email(to_email: str, subject: str, text_body: str, html_body: str) -> None:
     message = EmailMessage()
     message["From"] = settings.smtp_from_email
     message["To"] = to_email
@@ -74,19 +74,27 @@ def _send_email(to_email: str, subject: str, text_body: str, html_body: str) -> 
     message.add_alternative(html_body, subtype="html")
 
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
-            smtp.starttls()
-            smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(message)
+        async with aiosmtplib.SMTP(
+            hostname=settings.smtp_host, port=settings.smtp_port
+        ) as smtp:
+            # Gmail on port 587 normally requires STARTTLS, but some servers may already be TLS.
+            try:
+                await smtp.starttls()
+            except Exception as e:
+                # If TLS is already active, ignore the error; otherwise re‑raise.
+                if "already using TLS" not in str(e):
+                    raise
+            await smtp.login(settings.smtp_user, settings.smtp_password)
+            await smtp.send_message(message)
     except Exception:
         _email_health.mark_failure()
         raise
     else:
         _email_health.mark_recovered()
 
-def send_set_password_email(to_email: str, raw_token: str) -> None:
+async def send_set_password_email(to_email: str, raw_token: str) -> None:
     link = f"{settings.frontend_url}/set-password?token={raw_token}"
-    _send_email(
+    await _send_email(
         to_email=to_email,
         subject="ตั้งรหัสผ่านบัญชีของคุณ",
         text_body=f"กรุณาคลิกลิงก์เพื่อตั้งรหัสผ่าน: {link}",
@@ -99,9 +107,9 @@ def send_set_password_email(to_email: str, raw_token: str) -> None:
     )
 
 
-def send_invite_email(to_email: str, raw_token: str) -> None:
+async def send_invite_email(to_email: str, raw_token: str) -> None:
     link = f"{settings.frontend_url}/set-password?token={raw_token}"
-    _send_email(
+    await _send_email(
         to_email=to_email,
         subject="ยินดีต้อนรับเข้าสู่ระบบ Village Guard",
         text_body=f"คุณได้รับเชิญให้เข้าใช้งานระบบ กรุณาคลิกลิงก์เพื่อตั้งรหัสผ่านและเริ่มใช้งานบัญชีของคุณ: {link}",
@@ -113,28 +121,29 @@ def send_invite_email(to_email: str, raw_token: str) -> None:
         ),
     )
 
-def send_invite_email_background(to_email: str, raw_token: str) -> None:
+async def send_invite_email_background(to_email: str, raw_token: str) -> None:
     try:
-        send_invite_email(to_email, raw_token)
+        await send_invite_email(to_email, raw_token)
     except Exception:
         logger.warning("Failed to send invite email to %s", to_email)
 
-def send_set_password_email_background(to_email: str, raw_token: str) -> None:
+async def send_set_password_email_background(to_email: str, raw_token: str) -> None:
     try:
-        send_set_password_email(to_email, raw_token)
+        await send_set_password_email(to_email, raw_token)
     except Exception:
         logger.warning("Failed to send password reset email to %s", to_email)
 
-def send_bulk_plain_email(
+async def send_bulk_plain_email(
     to_emails: list[str],
     subject: str,
     text_body: str,
     html_body: str,
 ) -> list[str]:
     try:
-        smtp = smtplib.SMTP(settings.smtp_host, settings.smtp_port)
-        smtp.starttls()
-        smtp.login(settings.smtp_user, settings.smtp_password)
+        smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
+        await smtp.connect()
+        await smtp.starttls()
+        await smtp.login(settings.smtp_user, settings.smtp_password)
     except Exception:
         _email_health.mark_failure()
         raise
@@ -150,12 +159,12 @@ def send_bulk_plain_email(
             message.add_alternative(html_body, subtype="html")
 
             try:
-                smtp.send_message(message)
+                await smtp.send_message(message)
             except Exception:
                 logger.warning("Failed to send bulk email to %s", to_email)
                 failed_recipients.append(to_email)
     finally:
-        smtp.quit()
+        await smtp.quit()
 
     _email_health.mark_recovered()
     return failed_recipients
@@ -190,7 +199,7 @@ def _render_blacklist_alert_html(
 </html>"""
 
 
-def send_blacklist_alert_email(
+async def send_blacklist_alert_email(
     to_emails: list[str],
     camera_name: str,
     license_plate: str,
@@ -207,11 +216,11 @@ def send_blacklist_alert_email(
     )
     html_body = _render_blacklist_alert_html(camera_name, license_plate, province, detected_at_local)
 
-    return send_bulk_plain_email(to_emails, subject, text_body, html_body)
+    return await send_bulk_plain_email(to_emails, subject, text_body, html_body)
 
-def send_email_change_confirmation_email(to_email: str, raw_token: str) -> None:
+async def send_email_change_confirmation_email(to_email: str, raw_token: str) -> None:
     link = f"{settings.frontend_url}/confirm-email-change?token={raw_token}"
-    _send_email(
+    await _send_email(
         to_email=to_email,
         subject="ยืนยันการเปลี่ยนอีเมลของบัญชีคุณ",
         text_body=f"กรุณาคลิกลิงก์เพื่อยืนยันการเปลี่ยนอีเมล: {link}",
@@ -224,8 +233,8 @@ def send_email_change_confirmation_email(to_email: str, raw_token: str) -> None:
     )
 
 
-def send_email_change_confirmation_background(to_email: str, raw_token: str) -> None:
+async def send_email_change_confirmation_background(to_email: str, raw_token: str) -> None:
     try:
-        send_email_change_confirmation_email(to_email, raw_token)
+        await send_email_change_confirmation_email(to_email, raw_token)
     except Exception:
         logger.warning("Failed to send email change confirmation to %s", to_email)

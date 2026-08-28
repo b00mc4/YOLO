@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
-    for task in (resync_task, verification_resume_task):
+    for task in (resync_task, verification_resume_task, clean_notification_task):
         if not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

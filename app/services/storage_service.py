@@ -105,8 +105,20 @@ def _write_file(path: Path, content: bytes) -> None:
     path.write_bytes(content)
 
 
-async def write_detection_image(relative_path: str, content: bytes) -> None:
-    absolute_path = Path(settings.storage_path) / relative_path
+def _safe_resolve(relative_path: str) -> Path:
+    """Resolve *relative_path* under the storage root, rejecting traversal."""
+    base = Path(settings.storage_path).resolve()
+    resolved = (base / relative_path).resolve()
+    if not resolved.is_relative_to(base):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=StorageErrors.INVALID_PATH,
+        )
+    return resolved
+
+
+async def write_image(relative_path: str, content: bytes) -> None:
+    absolute_path = _safe_resolve(relative_path)
     await run_in_threadpool(_write_file, absolute_path, content)
 
 
@@ -117,13 +129,13 @@ def _delete_file(path: Path) -> None:
         logger.warning("Failed to delete orphaned image: %s", path)
 
 
-async def delete_detection_image(relative_path: str) -> None:
-    absolute_path = Path(settings.storage_path) / relative_path
+async def delete_image(relative_path: str) -> None:
+    absolute_path = _safe_resolve(relative_path)
     await run_in_threadpool(_delete_file, absolute_path)
 
 
 def resolve_storage_path(relative_path: str) -> Path:
-    return Path(settings.storage_path) / relative_path
+    return _safe_resolve(relative_path)
 
 
 def guess_media_type(path: Path) -> str:

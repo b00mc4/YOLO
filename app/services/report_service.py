@@ -1,9 +1,10 @@
 from __future__ import annotations
+import asyncio
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.camera import CameraDirection
 from app.models.car import Car
@@ -30,14 +31,6 @@ def _bangkok_day_range_bounds(days: int) -> tuple[date, date, datetime, datetime
 
     return date_from, date_to, start_utc, end_utc
 
-async def _count_whitelist(db: AsyncSession, base_filters: list) -> int:
-    result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .where(*base_filters, Car.is_whitelist.is_(True))
-    )
-    return result.scalar_one()
-
 def _bangkok_single_day_bounds(target_date: date) -> tuple[datetime, datetime]:
     start_utc = _bangkok_midnight(target_date).astimezone(timezone.utc)
     end_utc = start_utc + timedelta(days=1)
@@ -58,46 +51,30 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
     return [Car.village_id == current_user.village_id]
 
 
-async def _count_total(db: AsyncSession, base_filters: list) -> int:
-    result = await db.execute(
+async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
+    # --- single aggregated counts query (replaces 6 separate queries) ---
+    unique_plates_sub = (
         select(func.count())
+        .select_from(
+            select(Car.license_plate, Car.province)
+            .where(*base_filters)
+            .distinct()
+            .subquery()
+        )
+    )
+    agg_query = (
+        select(
+            func.count().label("total"),
+            func.count(case((Car.is_blacklist.is_(True), 1))).label("blacklist"),
+            func.count(case((Car.is_whitelist.is_(True), 1))).label("whitelist"),
+            func.count(case((Car.direction == CameraDirection.ENTRY, 1))).label("entry"),
+            func.count(case((Car.direction == CameraDirection.EXIT, 1))).label("exit"),
+        )
         .select_from(Car)
         .where(*base_filters)
     )
-    return result.scalar_one()
 
-
-async def _count_unique_plates(db: AsyncSession, base_filters: list) -> int:
-    unique_subquery = (
-        select(Car.license_plate, Car.province)
-        .where(*base_filters)
-        .distinct()
-        .subquery()
-    )
-    result = await db.execute(select(func.count()).select_from(unique_subquery))
-    return result.scalar_one()
-
-
-async def _count_blacklist(db: AsyncSession, base_filters: list) -> int:
-    result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .where(*base_filters, Car.is_blacklist.is_(True))
-    )
-    return result.scalar_one()
-
-
-async def _count_by_direction(db: AsyncSession, base_filters: list, direction: CameraDirection) -> int:
-    result = await db.execute(
-        select(func.count())
-        .select_from(Car)
-        .where(*base_filters, Car.direction == direction)
-    )
-    return result.scalar_one()
-
-
-async def _top_repeated_plates(db: AsyncSession, base_filters: list) -> list[RepeatedPlateEntry]:
-    result = await db.execute(
+    top_repeated_query = (
         select(Car.license_plate, Car.province, func.count())
         .where(*base_filters)
         .group_by(Car.license_plate, Car.province)
@@ -105,41 +82,46 @@ async def _top_repeated_plates(db: AsyncSession, base_filters: list) -> list[Rep
         .order_by(func.count().desc())
         .limit(_TOP_PLATES_LIMIT)
     )
-    return [
-        RepeatedPlateEntry(license_plate=plate, province=province, count=count)
-        for plate, province, count in result.all()
-    ]
 
-
-async def _hourly_buckets(db: AsyncSession, base_filters: list) -> list[HourlyBucket]:
     bangkok_hour = func.extract(
         "hour", func.timezone("Asia/Bangkok", Car.time_detect)
     )
-
-    result = await db.execute(
+    hourly_query = (
         select(bangkok_hour.label("hour"), func.count())
         .select_from(Car)
         .where(*base_filters)
         .group_by(bangkok_hour)
     )
-    counts_by_hour = {int(hour): count for hour, count in result.all()}
 
-    return [
+    # --- execute 4 queries in parallel via asyncio.gather ---
+    agg_result, unique_result, top_repeated_result, hourly_result = await asyncio.gather(
+        db.execute(agg_query),
+        db.execute(unique_plates_sub),
+        db.execute(top_repeated_query),
+        db.execute(hourly_query),
+    )
+
+    row = agg_result.one()
+
+    top_repeated_plates = [
+        RepeatedPlateEntry(license_plate=plate, province=province, count=count)
+        for plate, province, count in top_repeated_result.all()
+    ]
+
+    counts_by_hour = {int(hour): count for hour, count in hourly_result.all()}
+    hourly_buckets = [
         HourlyBucket(hour=hour, count=counts_by_hour.get(hour, 0))
         for hour in range(24)
     ]
 
-
-async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
-    hourly_buckets = await _hourly_buckets(db, base_filters)
     return {
-        "total_detections": await _count_total(db, base_filters),
-        "unique_plates": await _count_unique_plates(db, base_filters),
-        "blacklist_detections": await _count_blacklist(db, base_filters),
-        "whitelist_detections": await _count_whitelist(db, base_filters),
-        "entry_detections": await _count_by_direction(db, base_filters, CameraDirection.ENTRY),
-        "exit_detections": await _count_by_direction(db, base_filters, CameraDirection.EXIT),
-        "top_repeated_plates": await _top_repeated_plates(db, base_filters),
+        "total_detections": row.total,
+        "unique_plates": unique_result.scalar_one(),
+        "blacklist_detections": row.blacklist,
+        "whitelist_detections": row.whitelist,
+        "entry_detections": row.entry,
+        "exit_detections": row.exit,
+        "top_repeated_plates": top_repeated_plates,
         "hourly_buckets": hourly_buckets,
         "peak_time": _compute_peak_time(hourly_buckets),
     }
