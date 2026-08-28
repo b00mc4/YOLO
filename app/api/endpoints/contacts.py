@@ -70,4 +70,4 @@ async def delete_contact(
     db: AsyncSession = Depends(get_db),
 ):
     await contact_service.delete_contact(db, request, current_user, contact_id)
-    return MessageResponse(detail="Contact deleted successfully")
+    return MessageResponse(detail="ลบผู้ติดต่อสำเร็จ")

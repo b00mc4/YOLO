@@ -47,9 +47,7 @@ class VillageErrors:
     NOT_FOUND = "ไม่พบหมู่บ้าน"
 
 
-class CameraErrors:
-    NOT_FOUND = "ไม่พบกล้อง"
-    SYNC_WITH_AI_VISION_FAILED = "ซิงค์ข้อมูลกล้องกับระบบ AI vision ไม่สำเร็จ"
+
 
 
 class ContactErrors:
@@ -79,19 +77,6 @@ class BlacklistErrors:
 class WhitelistErrors:
     NOT_FOUND = "ไม่พบรายการในบัญชีขาว"
     PLATE_IS_BLACKLISTED = "ทะเบียนนี้อยู่ในบัญชีดำของหมู่บ้านนี้อยู่แล้ว"
-
-
-class DetectionErrors:
-    NOT_FOUND = "ไม่พบข้อมูลการตรวจจับ"
-    IMAGE_FILE_NOT_FOUND = "ไม่พบไฟล์รูปภาพ"
-    CAMERA_VILLAGE_INACTIVE = "หมู่บ้านของกล้องนี้ถูกระงับการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
-    CAMERA_INACTIVE = "กล้องนี้ถูกปิดการใช้งาน ไม่สามารถรับข้อมูลการตรวจจับได้"
-    STORE_IMAGE_FAILED = "บันทึกรูปภาพการตรวจจับไม่สำเร็จ"
-    REQUIRED_FILES_MISSING = "ต้องแนบไฟล์ image_crop และ image_full"
-
-    @staticmethod
-    def unsupported_request_content_type(content_type: str) -> str:
-        return f"ไม่รองรับ Content-Type: {content_type}"
 
 
 class StorageErrors:

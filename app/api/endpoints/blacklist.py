@@ -59,4 +59,4 @@ async def delete_blacklist_entry(
     db: AsyncSession = Depends(get_db),
 ):
     await blacklist_service.delete_blacklist_entry(db, request, current_user, entry_id)
-    return MessageResponse(detail="Blacklist entry deleted successfully")
+    return MessageResponse(detail="ลบข้อมูลบัญชีดำสำเร็จ")

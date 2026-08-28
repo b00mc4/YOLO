@@ -32,7 +32,7 @@ async def get_unread_count(
     return UnreadCountResponse(count=count)
 
 
-@router.post("/{notification_id}/read", response_model=NotificationRead)
+@router.patch("/{notification_id}/read", response_model=NotificationRead)
 async def mark_notification_read(
     notification_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -41,10 +41,10 @@ async def mark_notification_read(
     return await notification_service.mark_notification_read(db, current_user, notification_id)
 
 
-@router.post("/read-all", response_model=MessageResponse)
+@router.patch("/read-all", response_model=MessageResponse)
 async def mark_all_notifications_read(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     count = await notification_service.mark_all_notifications_read(db, current_user)
-    return MessageResponse(detail=f"Marked {count} notification(s) as read")
+    return MessageResponse(detail=f"อ่านแล้ว {count} รายการ")

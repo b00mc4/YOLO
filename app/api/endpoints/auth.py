@@ -43,6 +43,8 @@ _SET_PASSWORD_IP_LIMIT = 20
 _SET_PASSWORD_IP_WINDOW_SECONDS = 10 * 60
 _CONFIRM_EMAIL_CHANGE_IP_LIMIT = 20
 _CONFIRM_EMAIL_CHANGE_IP_WINDOW_SECONDS = 10 * 60
+_CHANGE_PASSWORD_IP_LIMIT = 5
+_CHANGE_PASSWORD_IP_WINDOW_SECONDS = 60 * 60
 
 def _set_refresh_cookie(response: Response, raw_refresh_token: str, remember_me: bool) -> None:
     cookie_kwargs = {}
@@ -121,7 +123,7 @@ async def logout(
     if raw_refresh_token is not None:
         await auth_service.revoke_refresh_token(db, raw_refresh_token)
     _clear_refresh_cookie(response)
-    return MessageResponse(detail="Logged out successfully")
+    return MessageResponse(detail="ออกจากระบบสำเร็จ")
 
 
 @router.post(
@@ -192,7 +194,11 @@ async def confirm_email_change(
     )
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post(
+    "/change-password",
+    response_model=MessageResponse,
+    dependencies=[Depends(rate_limit_by_ip("change_password", _CHANGE_PASSWORD_IP_LIMIT, _CHANGE_PASSWORD_IP_WINDOW_SECONDS))],
+)
 async def change_password(
     payload: ChangePasswordRequest,
     request: Request,
@@ -209,4 +215,4 @@ async def change_password(
         new_password=payload.new_password,
     )
     _clear_refresh_cookie(response)
-    return MessageResponse(detail="Password changed successfully")
+    return MessageResponse(detail="เปลี่ยนรหัสผ่านสำเร็จ")

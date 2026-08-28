@@ -58,4 +58,4 @@ async def delete_whitelist_entry(
     db: AsyncSession = Depends(get_db),
 ):
     await whitelist_service.delete_whitelist_entry(db, request, current_user, entry_id)
-    return MessageResponse(detail="Whitelist entry deleted successfully")
+    return MessageResponse(detail="ลบข้อมูลบัญชีขาวสำเร็จ")

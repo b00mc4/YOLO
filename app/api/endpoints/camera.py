@@ -128,7 +128,7 @@ async def delete_camera(
     db: AsyncSession = Depends(get_db),
 ):
     await camera_service.delete_camera(db, request, background_tasks, current_user, camera_id)
-    return MessageResponse(detail="Camera permanently deleted")
+    return MessageResponse(detail="ลบกล้องถาวรสำเร็จ")
 
 @router.post("/onvif/probe", response_model=OnvifProbeResponse)
 async def probe_onvif_camera(
