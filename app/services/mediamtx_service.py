@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 _REQUEST_TIMEOUT_SECONDS = 5.0
 _TRIGGER_PULL_TIMEOUT_SECONDS = 3.0
 
+_client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
+
+
+async def close() -> None:
+    await _client.aclose()
+
+
 _SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS = 10.0
 _COLD_START_POLL_INTERVAL_SECONDS = 1.0
 _COLD_START_POLL_BUFFER_SECONDS = 2.0
@@ -37,16 +44,15 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/replace/{path_name}"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                url,
-                json={
-                    "source": source_rtsp_url,
-                    "sourceOnDemand": True,
-                    "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
-                },
-                auth=_auth(),
-            )
+        response = await _client.post(
+            url,
+            json={
+                "source": source_rtsp_url,
+                "sourceOnDemand": True,
+                "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+            },
+            auth=_auth(),
+        )
     except httpx.HTTPError as exc:
         logger.error("MediaMTX upsert_path request failed for %s: %s", camera_id, exc)
         return False
@@ -66,8 +72,7 @@ async def remove_path(camera_id: uuid.UUID) -> bool:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/delete/{path_name}"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.delete(url, auth=_auth())
+        response = await _client.delete(url, auth=_auth())
     except httpx.HTTPError as exc:
         logger.error("MediaMTX remove_path request failed for %s: %s", camera_id, exc)
         return False
@@ -87,8 +92,7 @@ async def _get_path_info(camera_id: uuid.UUID) -> dict | None:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/paths/get/{path_name}"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.get(url, auth=_auth())
+        response = await _client.get(url, auth=_auth())
     except httpx.HTTPError as exc:
         logger.warning("MediaMTX get_path_info request failed for %s: %s", camera_id, exc)
         return None
@@ -116,8 +120,7 @@ async def _trigger_on_demand_pull(camera_id: uuid.UUID) -> None:
     playlist_url = f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8?jwt={token}"
 
     try:
-        async with httpx.AsyncClient(timeout=_TRIGGER_PULL_TIMEOUT_SECONDS) as client:
-            await client.get(playlist_url)
+        await _client.get(playlist_url, timeout=_TRIGGER_PULL_TIMEOUT_SECONDS)
     except httpx.HTTPError:
         pass
 

@@ -9,7 +9,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import camera_service, camera_verification_service, notification_service
+from app.services import camera_service, camera_verification_service, mediamtx_service, notification_service
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
@@ -78,9 +78,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+    
+    await mediamtx_service.close()
 
 
-app = FastAPI(title="License Plate Detection API", lifespan=lifespan)
+app = FastAPI(
+    title="License Plate Detection API", 
+    lifespan=lifespan,
+    servers=[{"url": settings.backend_public_url}]
+)
 
 @app.get("/health", include_in_schema=False)
 async def health_check():

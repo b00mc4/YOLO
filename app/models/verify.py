@@ -10,9 +10,9 @@ from sqlalchemy.sql import func
 from app.db.base_class import Base
 
 class VerifyType(str, enum.Enum):
-    INITIAL_SETUP = "initial_setup"
-    PASSWORD_RESET = "password_reset"
-    EMAIL_CHANGE = "email_change"
+    INITIAL_SETUP = "INITIAL_SETUP"
+    PASSWORD_RESET = "PASSWORD_RESET"
+    EMAIL_CHANGE = "EMAIL_CHANGE"
 
 
 class Verify(Base):

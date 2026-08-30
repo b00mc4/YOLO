@@ -8,7 +8,7 @@ from fastapi import Request
 from sqlalchemy import select
 from app.db.session import async_session_maker
 from app.models.camera import Camera, CameraVerificationStatus
-from app.services import ai_vision_service, audit_service, camera_sync_service, notification_service
+from app.services import ai_vision_service, audit_service, notification_service
 from app.services.ai_vision_service import VerificationCheckResult
 
 logger = logging.getLogger(__name__)
@@ -127,9 +127,10 @@ async def _finalize(
         verification_status = camera.verification_status
 
     if not verified:
-        failed_services = await camera_sync_service.sync_camera_offline(camera_id_value)
+        from app.services import camera_service
+        failed_services = await camera_service.sync_camera_offline(camera_id_value)
         if failed_services:
-            await camera_sync_service.notify_sync_failure(
+            await camera_service.notify_sync_failure(
                 village_id, camera_id_value, camera_name, failed_services
             )
 
