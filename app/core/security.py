@@ -27,20 +27,21 @@ def verify_password(password: str, hashed: str):
         return False
 
 
-def create_access_token(user_id: uuid.UUID):
+def create_access_token(user_id: uuid.UUID, jti: str):
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
+        "jti": jti,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> tuple[uuid.UUID, datetime]:
+def decode_access_token(token: str) -> tuple[uuid.UUID, datetime, str | None]:
     payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     issued_at = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
-    return uuid.UUID(payload["sub"]), issued_at
+    return uuid.UUID(payload["sub"]), issued_at, payload.get("jti")
 
 
 def generate_secure_token():

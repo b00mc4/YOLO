@@ -24,16 +24,25 @@ _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 _API_KEY_FAILURE_LIMIT = 3
 _API_KEY_FAILURE_WINDOW_SECONDS = 5 * 60
 
+from app.core.session_manager import session_manager
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        user_id, issued_at = decode_access_token(token)
+        user_id, issued_at, jti = decode_access_token(token)
     except (jwt.PyJWTError, ValueError, KeyError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=Auth.COULD_NOT_VALIDATE_CREDENTIALS,
+            headers=_UNAUTHORIZED_HEADERS,
+        )
+
+    if not jti or not session_manager.is_valid_session(user_id, jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="เซสชันหมดอายุ หรือมีการเข้าสู่ระบบจากเครื่องอื่นเกินจำนวนที่กำหนด",
             headers=_UNAUTHORIZED_HEADERS,
         )
 

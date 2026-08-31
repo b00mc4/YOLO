@@ -136,9 +136,14 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     return user
 
 
+from app.core.session_manager import session_manager
+
 async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
-    access_token = create_access_token(user.id)
     raw_refresh_token = generate_secure_token()
+    token_hash = hash_token(raw_refresh_token)
+    
+    session_manager.add_session(user.id, token_hash)
+    access_token = create_access_token(user.id, token_hash)
 
     if remember_me:
         expires_delta = timedelta(days=settings.refresh_token_expire_days)
@@ -147,7 +152,7 @@ async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
 
     refresh_token = RefreshToken(
         user_id=user.id,
-        token_hash=hash_token(raw_refresh_token),
+        token_hash=token_hash,
         expired_at=datetime.now(timezone.utc) + expires_delta,
         remember_me=remember_me,
     )
@@ -181,15 +186,18 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
 
     remember_me = stored_token.remember_me
     await db.delete(stored_token)
+    session_manager.remove_session_by_id(token_hash)
     access_token, new_raw_refresh_token = await issue_tokens(db, user, remember_me)
     return access_token, new_raw_refresh_token, remember_me
 
 async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str):
     token_hash = hash_token(raw_refresh_token)
+    session_manager.remove_session_by_id(token_hash)
     await db.execute(delete(RefreshToken).where(RefreshToken.token_hash == token_hash))
     await db.commit()
 
 async def revoke_all_refresh_tokens(db: AsyncSession, user_id: uuid.UUID):
+    session_manager.remove_all_sessions(user_id)
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
     
 
