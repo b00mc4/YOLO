@@ -13,6 +13,7 @@ class AuditLog(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("UserTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_username = Column(String(255), nullable=True)
     action = Column(String(255), nullable=False)
     detail = Column(String(1000), nullable=False)
     ip_address = Column(String(255), nullable=False)

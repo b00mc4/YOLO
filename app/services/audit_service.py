@@ -34,9 +34,15 @@ async def log_action(
         ip_address = _BACKGROUND_IP_ADDRESS
         user_agent = _BACKGROUND_USER_AGENT
 
+    actor_username = None
+    if user_id is not None:
+        user_result = await db.execute(select(User.username).where(User.id == user_id))
+        actor_username = user_result.scalar_one_or_none()
+
     entry = AuditLog(
         village_id=village_id,
         user_id=user_id,
+        actor_username=actor_username,
         action=action,
         detail=detail[:_DETAIL_MAX_LENGTH],
         ip_address=ip_address,
@@ -100,8 +106,7 @@ async def list_audit_logs(
     total = count_result.scalar_one()
 
     stmt = (
-        select(AuditLog, User.username, Group.name)
-        .outerjoin(User, AuditLog.user_id == User.id)
+        select(AuditLog, Group.name)
         .outerjoin(Group, AuditLog.village_id == Group.id)
         .where(*filters)
         .order_by(AuditLog.created_at.desc())
@@ -117,14 +122,14 @@ async def list_audit_logs(
             village_id=entry.village_id,
             village_name=village_name,
             user_id=entry.user_id,
-            username=username,
+            username=entry.actor_username,
             action=entry.action,
             detail=entry.detail,
             ip_address=entry.ip_address,
             user_agent=entry.user_agent,
             created_at=entry.created_at,
         )
-        for entry, username, village_name in rows
+        for entry, village_name in rows
     ]
 
     return PaginatedResponse[AuditLogRead](

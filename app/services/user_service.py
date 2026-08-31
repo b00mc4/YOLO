@@ -465,40 +465,7 @@ async def unlock_user_account(
     await db.commit()
     return target.username
 
-async def _verify_hard_delete_eligible(db: AsyncSession, target: User) -> None:
-    if target.hashpassword is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="บัญชีนี้เคยตั้งรหัสผ่านและใช้งานแล้ว ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    refresh_token_count = await db.execute(
-        select(func.count()).select_from(RefreshToken).where(RefreshToken.user_id == target.id)
-    )
-    if refresh_token_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="บัญชีนี้มีเซสชันการเข้าสู่ระบบผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    blacklist_count = await db.execute(
-        select(func.count()).select_from(Blacklist).where(Blacklist.added_by == target.id)
-    )
-    if blacklist_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="บัญชีนี้มีรายการ blacklist ที่เคยเพิ่มไว้ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    whitelist_count = await db.execute(
-        select(func.count()).select_from(Whitelist).where(Whitelist.added_by == target.id)
-    )
-    if whitelist_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="บัญชีนี้มีรายการ whitelist ที่เคยเพิ่มไว้ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
+from app.core.session_manager import session_manager
 
 async def delete_user(
     db: AsyncSession,
@@ -515,7 +482,6 @@ async def delete_user(
         )
 
     _verify_user_write_scope(current_user, target)
-    await _verify_hard_delete_eligible(db, target)
 
     if target.avatar_path:
         await storage_service.delete_image(target.avatar_path)
@@ -524,7 +490,7 @@ async def delete_user(
         db,
         request,
         action="user_deleted",
-        detail=f"permanently deleted unused user: {target.username}",
+        detail=f"permanently deleted user: {target.username}",
         user_id=current_user.id,
         village_id=target.village_id,
     )
@@ -534,6 +500,14 @@ async def delete_user(
     )
     await db.execute(delete(Verify).where(Verify.user_id == target.id))
     await db.execute(delete(Contact).where(Contact.user_id == target.id))
+    
+    from app.models.notification import Notification
+    await db.execute(delete(Notification).where(Notification.user_id == target.id))
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == target.id))
+    
+    # เตะ User ออกจาก Session ใน Memory ทันทีที่โดนลบ
+    session_manager.remove_all_sessions(target.id)
+    
     await db.delete(target)
     await db.commit()
 
