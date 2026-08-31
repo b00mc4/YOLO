@@ -84,8 +84,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="License Plate Detection API", 
-    lifespan=lifespan,
-    servers=[{"url": settings.backend_public_url}]
+    lifespan=lifespan
 )
 
 @app.get("/health", include_in_schema=False)

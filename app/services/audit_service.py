@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 from app.models.group import Group
@@ -67,6 +67,12 @@ def _build_audit_log_filters(
             filters.append(AuditLog.village_id == village_id_filter)
     else:
         filters.append(AuditLog.village_id == current_user.village_id)
+        filters.append(
+            or_(
+                User.role != UserRole.SUPERADMIN,
+                AuditLog.user_id.is_(None)
+            )
+        )
 
     if user_id_filter is not None:
         filters.append(AuditLog.user_id == user_id_filter)
@@ -101,13 +107,17 @@ async def list_audit_logs(
     )
 
     count_result = await db.execute(
-        select(func.count()).select_from(AuditLog).where(*filters)
+        select(func.count())
+        .select_from(AuditLog)
+        .outerjoin(User, AuditLog.user_id == User.id)
+        .where(*filters)
     )
     total = count_result.scalar_one()
 
     stmt = (
         select(AuditLog, Group.name)
         .outerjoin(Group, AuditLog.village_id == Group.id)
+        .outerjoin(User, AuditLog.user_id == User.id)
         .where(*filters)
         .order_by(AuditLog.created_at.desc())
         .offset((page - 1) * page_size)
