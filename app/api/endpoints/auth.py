@@ -129,15 +129,33 @@ async def logout(
 @router.post(
     "/forgot-password",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[
-        Depends(rate_limit_by_ip("forgot_password", _FORGOT_PASSWORD_IP_LIMIT, _FORGOT_PASSWORD_IP_WINDOW_SECONDS))
-    ],
+    dependencies=[Depends(rate_limit_by_ip("forgot_password_ip", 30, 10800))],
 )
 async def forgot_password(
     payload: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
+    from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
+    rate_limiter = get_rate_limiter()
+    
+    try:
+        rate_limiter.check(f"forgot_cooldown:{payload.email}", 1, 300)
+    except RateLimitExceeded as e:
+        minutes_left = int(e.retry_after_seconds // 60) + 1
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"กรุณารออีก {minutes_left} นาที ก่อนขอรหัสผ่านใหม่ได้อีกครั้ง"
+        )
+        
+    try:
+        rate_limiter.check(f"forgot_daily:{payload.email}", 3, 86400)
+    except RateLimitExceeded:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="คุณขอรหัสผ่านใหม่เกิน 3 ครั้งแล้ว กรุณาลองใหม่ในวันพรุ่งนี้"
+        )
+
     await auth_service.request_password_reset(db, background_tasks, payload.email)
 
 

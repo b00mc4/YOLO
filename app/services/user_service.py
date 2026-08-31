@@ -597,14 +597,6 @@ async def request_email_change(
     target = await _get_user_or_404(db, user_id)
     _verify_user_write_scope(current_user, target)
 
-    reauth_key = password_reauth_key(current_user.id)
-    get_rate_limiter().check(reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS)
-
-    if current_user.hashpassword is None or not verify_password(
-        payload.current_password, current_user.hashpassword
-    ):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
-
     if payload.new_email == target.email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=UserErrors.EMAIL_SAME_AS_CURRENT)
 

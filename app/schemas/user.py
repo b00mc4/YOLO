@@ -170,7 +170,6 @@ class UserProfileRead(BaseModel):
 
 class EmailChangeRequest(BaseModel):
     new_email: EmailStr = Field(max_length=255)
-    current_password: str = Field(max_length=128)
 
     @field_validator("new_email")
     @classmethod
