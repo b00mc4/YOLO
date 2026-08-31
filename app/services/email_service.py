@@ -143,7 +143,11 @@ async def send_bulk_plain_email(
     try:
         smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
         await smtp.connect()
-        await smtp.starttls()
+        try:
+            await smtp.starttls()
+        except aiosmtplib.errors.SMTPException as e:
+            if "already using TLS" not in str(e):
+                raise
         await smtp.login(settings.smtp_user, settings.smtp_password)
     except Exception:
         _email_health.mark_failure()

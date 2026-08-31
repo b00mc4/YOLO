@@ -40,3 +40,7 @@ auto.crt
 auto.key
 
 ngrok.exe
+test_detection_assets/
+test_camera_verification.py
+test_detection.py
+test_onvif.py
