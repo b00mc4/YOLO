@@ -91,6 +91,22 @@ async def _probe(host: str, port: int, username: str, password: str) -> dict:
 
 
 async def probe_camera(host: str, port: int, username: str, password: str) -> dict:
+    if host.lower() == "mock":
+        return {
+            "device_manufacturer": "MockVision",
+            "device_model": "MV-1080P",
+            "profiles": [
+                {
+                    "profile_token": "profile_1",
+                    "name": "MainStream",
+                    "encoding": "H264",
+                    "width": 1920,
+                    "height": 1080,
+                    "rtsp_uri": f"rtsp://{username}:{password}@192.168.1.100:554/stream1" if username else "rtsp://192.168.1.100:554/stream1",
+                }
+            ],
+        }
+
     try:
         return await asyncio.wait_for(
             _probe(host, port, username, password), timeout=_PROBE_TIMEOUT_SECONDS

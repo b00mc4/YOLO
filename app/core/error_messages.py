@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 
 class Common:
@@ -20,10 +20,10 @@ class Auth:
     VILLAGE_INACTIVE = "หมู่บ้านถูกระงับการใช้งาน"
     INVALID_API_KEY = "API key ไม่ถูกต้อง"
     INVALID_CREDENTIALS = "ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง"
-    INVALID_OR_EXPIRED_REFRESH_TOKEN = "Refresh token ไม่ถูกต้องหรือหมดอายุ"
+    INVALID_OR_EXPIRED_REFRESH_TOKEN = "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง"
     MISSING_REFRESH_TOKEN = "ไม่พบ refresh token"
     CURRENT_PASSWORD_INCORRECT = "รหัสผ่านปัจจุบันไม่ถูกต้อง"
-    INVALID_OR_EXPIRED_TOKEN = "โทเคนไม่ถูกต้องหรือหมดอายุ"
+    INVALID_OR_EXPIRED_TOKEN = "ลิงก์นี้หมดอายุ หรือไม่ถูกต้อง กรุณาทำรายการใหม่อีกครั้ง"
     SESSION_REVOKED_PASSWORD_CHANGED = "เซสชันถูกยกเลิกเนื่องจากมีการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่"
 
 
@@ -101,7 +101,7 @@ class NotificationErrors:
 
 
 class RealtimeErrors:
-    INVALID_OR_EXPIRED_TICKET = "Ticket ไม่ถูกต้องหรือหมดอายุ"
+    INVALID_OR_EXPIRED_TICKET = "การเชื่อมต่อหมดอายุ กรุณารีเฟรชหน้าเว็บ"
 
     @staticmethod
     def too_many_connections(max_connections: int) -> str:

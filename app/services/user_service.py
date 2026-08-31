@@ -600,8 +600,6 @@ async def request_email_change(
     if payload.new_email == target.email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=UserErrors.EMAIL_SAME_AS_CURRENT)
 
-    get_rate_limiter().reset(reauth_key)
-
     existing_email_result = await db.execute(select(User.id).where(User.email == payload.new_email))
     if existing_email_result.scalar_one_or_none() is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=UserErrors.EMAIL_ALREADY_IN_USE)
