@@ -217,6 +217,13 @@ async def create_camera(
             detail=CameraErrors.CANNOT_CREATE_VILLAGE_INACTIVE,
         )
 
+    existing_name_result = await db.execute(select(Camera).where(Camera.village_id == village_id, Camera.name == payload.name))
+    if existing_name_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CameraErrors.NAME_ALREADY_EXISTS,
+        )
+
     camera = Camera(
         village_id=village_id,
         name=payload.name,
@@ -364,6 +371,15 @@ async def update_camera(
     village = await _get_village_or_404(db, camera.village_id)
 
     update_data = payload.model_dump(exclude_unset=True)
+    
+    if "name" in update_data and update_data["name"] != camera.name:
+        existing_name_result = await db.execute(select(Camera).where(Camera.village_id == camera.village_id, Camera.name == update_data["name"]))
+        if existing_name_result.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=CameraErrors.NAME_ALREADY_EXISTS,
+            )
+
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
     is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
 

@@ -144,6 +144,7 @@ class OnvifErrors:
     UNSUPPORTED_OR_UNREACHABLE = "กล้องนี้ไม่รองรับ ONVIF หรือมีปัญหาในการเชื่อมต่อ"
 
 class CameraErrors:
+    NAME_ALREADY_EXISTS = "ชื่อกล้องนี้มีอยู่แล้วในหมู่บ้าน กรุณาตั้งชื่ออื่น"
     NOT_FOUND = "ไม่พบกล้อง"
     DELETE_HAS_DETECTIONS = "กล้องนี้มีข้อมูลการตรวจจับผูกอยู่ ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
     DELETE_ALREADY_LINKED = "กล้องนี้เชื่อมต่อกับระบบ AI vision แล้ว ไม่สามารถลบได้ กรุณาปิดการใช้งานแทน"
