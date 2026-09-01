@@ -1,4 +1,6 @@
 from __future__ import annotations
+import uuid
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from app.core.security import validate_password_policy
 from app.schemas.user import UserRead
@@ -61,3 +63,14 @@ class EmailChangeConfirmResponse(BaseModel):
 
 class VerifyTokenRequest(BaseModel):
     token: str = Field(max_length=512)
+
+class SessionInfo(BaseModel):
+    id: uuid.UUID
+    created_at: datetime
+    expired_at: datetime
+    is_current: bool = False
+
+class ActiveSessionsResponse(BaseModel):
+    active_sessions_count: int
+    max_sessions: int
+    sessions: list[SessionInfo]

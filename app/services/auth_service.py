@@ -381,3 +381,37 @@ async def confirm_email_change(db: AsyncSession, request: Request, raw_token: st
     await db.commit()
 
     return user.username, user.email
+
+from app.schemas.auth import ActiveSessionsResponse, SessionInfo
+
+async def get_active_sessions(db: AsyncSession, request: Request, current_user: User) -> ActiveSessionsResponse:
+    # 1. Fetch unexpired refresh tokens from DB
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == current_user.id,
+            RefreshToken.expired_at > datetime.now(timezone.utc)
+        ).order_by(RefreshToken.created_at.desc())
+    )
+    tokens = result.scalars().all()
+    
+    # 2. Filter with session_manager to get only TRULY active sessions (max 5)
+    current_raw_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    current_token_hash = hash_token(current_raw_token) if current_raw_token else None
+
+    active_sessions = []
+    for token in tokens:
+        if session_manager.is_valid_session(current_user.id, token.token_hash):
+            active_sessions.append(
+                SessionInfo(
+                    id=token.id,
+                    created_at=token.created_at,
+                    expired_at=token.expired_at,
+                    is_current=(token.token_hash == current_token_hash)
+                )
+            )
+
+    return ActiveSessionsResponse(
+        active_sessions_count=len(active_sessions),
+        max_sessions=session_manager.max_sessions,
+        sessions=active_sessions
+    )

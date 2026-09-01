@@ -156,11 +156,14 @@ async def _handle_verification_timeout(camera_id: uuid.UUID) -> None:
         if camera.verification_status != CameraVerificationStatus.PENDING:
             return
 
+        camera.verification_status = CameraVerificationStatus.FAILED
+        camera.is_active = False
+
         action = "camera_verification_timeout"
         detail = (
             f"camera verification timed out for '{camera.name}': "
             "no confirmation from ai vision service within the poll window; "
-            "status remains pending, manual verification-check recommended"
+            "status updated to failed automatically"
         )
 
         await audit_service.log_action(

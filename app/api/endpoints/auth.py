@@ -15,7 +15,8 @@ from app.schemas.auth import (
     SetPasswordRequest,
     SetPasswordResponse,
     TokenResponse,
-    VerifyTokenRequest
+    VerifyTokenRequest,
+    ActiveSessionsResponse
 )
 from app.schemas.common import MessageResponse
 from app.services import auth_service
@@ -82,7 +83,6 @@ async def login(
     remember_me: bool = Form(False),
     db: AsyncSession = Depends(get_db),
 ):
-    """Login ธรรมดาทั่วไป"""
     user = await auth_service.authenticate_user(db, request, form_data.username, form_data.password, remember_me)
     access_token, raw_refresh_token = await auth_service.issue_tokens(db, user, remember_me)
     _set_refresh_cookie(response, raw_refresh_token, remember_me)
@@ -234,3 +234,15 @@ async def change_password(
     )
     _clear_refresh_cookie(response)
     return MessageResponse(detail="เปลี่ยนรหัสผ่านสำเร็จ")
+
+@router.get(
+    "/sessions",
+    response_model=ActiveSessionsResponse,
+)
+async def get_active_sessions(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """ดูเซสชันอุปกรณ์ที่กำลังเข้าสู่ระบบอยู่"""
+    return await auth_service.get_active_sessions(db, request, current_user)

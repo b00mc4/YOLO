@@ -107,7 +107,6 @@ async def _handle_real_detection(
     "",
     response_model=DetectionCreateAck,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_api_key)],
 )
 async def create_detection(
     request: Request,
