@@ -176,6 +176,12 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     if user is None or not user.is_active or not user.is_verify:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
+    # Check if this session was kicked out from memory (e.g. max sessions reached)
+    if not session_manager.is_valid_session(user.id, token_hash):
+        await db.delete(stored_token)
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
+
     village_is_active = True
     if user.role != UserRole.SUPERADMIN:
         village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))

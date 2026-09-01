@@ -36,6 +36,11 @@ class UserCreate(BaseModel):
             raise ValueError("ชื่อ-นามสกุลต้องมีความยาวอย่างน้อย 4 ตัวอักษร")
         if len(v) > 100:
             raise ValueError("ชื่อ-นามสกุลต้องมีความยาวไม่เกิน 100 ตัวอักษร")
+        
+        import re
+        if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s]+$", v):
+            raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ และช่องว่างเท่านั้น (ห้ามใช้อิโมจิหรืออักขระพิเศษ)")
+            
         return v
 
     @field_validator("email")
@@ -152,8 +157,12 @@ class UserFullnameUpdate(BaseModel):
 
     @field_validator("fullname")
     @classmethod
-    def normalize_fullname(cls, v: str) -> str:
-        return v.strip()
+    def validate_fullname_update(cls, v: str) -> str:
+        v = v.strip()
+        import re
+        if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s]+$", v):
+            raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ และช่องว่างเท่านั้น (ห้ามใช้อิโมจิหรืออักขระพิเศษ)")
+        return v
 
 
 class UserProfileRead(BaseModel):

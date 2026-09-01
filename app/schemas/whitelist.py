@@ -19,8 +19,11 @@ class WhitelistCreate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def normalize_name(cls, v: str) -> str:
-        return v.strip()
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s\.]+$", v):
+            raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ จุด และช่องว่างเท่านั้น (ห้ามใส่อิโมจิหรืออักขระพิเศษอื่น)")
+        return v
 
     @field_validator("license_plate", "province")
     @classmethod
@@ -51,8 +54,12 @@ class WhitelistUpdate(BaseModel):
 
     @field_validator("name")
     @classmethod
-    def normalize_name(cls, v: str | None) -> str | None:
-        return v.strip() if v is not None else v
+    def validate_name_update(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s\.]+$", v):
+                raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ จุด และช่องว่างเท่านั้น (ห้ามใส่อิโมจิหรืออักขระพิเศษอื่น)")
+        return v
 
     @field_validator("license_plate", "province")
     @classmethod

@@ -23,7 +23,14 @@ class BlacklistCreate(BaseModel):
     @classmethod
     def validate_thai_plate(cls, v: str) -> str:
         if not _THAI_PLATE_PATTERN.match(v):
-            raise ValueError("ป้ายทะเบียนต้องเป็นภาษาไทยและตัวเลข 0-9 เท่านั้น")
+            raise ValueError("ป้ายทะเบียนต้องเป็นอักขระภาษาไทย อังกฤษ หรือตัวเลขเท่านั้น")
+        return v
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str) -> str:
+        if not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v):
+            raise ValueError("เหตุผลต้องเป็นภาษาไทย ภาษาอังกฤษ ตัวเลข และอักขระพิเศษเท่านั้น (ห้ามใส่อิโมจิ)")
         return v
 
 
@@ -44,6 +51,12 @@ class BlacklistUpdate(BaseModel):
             raise ValueError("ป้ายทะเบียนต้องเป็นภาษาไทยและตัวเลข 0-9 เท่านั้น")
         return v
 
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str | None) -> str | None:
+        if v is not None and not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v):
+            raise ValueError("เหตุผลต้องเป็นภาษาไทย ภาษาอังกฤษ ตัวเลข และอักขระพิเศษเท่านั้น (ห้ามใส่อิโมจิ)")
+        return v
 
 class BlacklistRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
