@@ -93,13 +93,11 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
         .group_by(bangkok_hour)
     )
 
-    # --- execute 4 queries in parallel via asyncio.gather ---
-    agg_result, unique_result, top_repeated_result, hourly_result = await asyncio.gather(
-        db.execute(agg_query),
-        db.execute(unique_plates_sub),
-        db.execute(top_repeated_query),
-        db.execute(hourly_query),
-    )
+    # --- execute 4 queries sequentially to prevent MissingGreenlet ---
+    agg_result = await db.execute(agg_query)
+    unique_result = await db.execute(unique_plates_sub)
+    top_repeated_result = await db.execute(top_repeated_query)
+    hourly_result = await db.execute(hourly_query)
 
     row = agg_result.one()
 

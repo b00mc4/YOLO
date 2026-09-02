@@ -167,25 +167,14 @@ async def _sync_camera_update(
     camera_id: uuid.UUID,
     village_id: uuid.UUID,
     camera_name: str,
-    stream_ai: str | None,
     is_active: bool | None,
 ) -> None:
     failed_services: list[str] = []
-    should_verify = False
-
-    if stream_ai is not None:
-        ai_vision_pushed, stream_failed = await _push_stream_config(camera_id, stream_ai)
-        failed_services.extend(stream_failed)
-        if ai_vision_pushed:
-            should_verify = True
 
     if is_active is not None:
         status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
         if not status_ok:
             failed_services.append("ai_vision")
-
-    if should_verify:
-        camera_verification_service.start_verification(camera_id)
 
     if failed_services:
         await notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
@@ -371,6 +360,13 @@ async def update_camera(
     village = await _get_village_or_404(db, camera.village_id)
 
     update_data = payload.model_dump(exclude_unset=True)
+
+    if "is_active" in update_data and update_data["is_active"] and not village.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CameraErrors.CANNOT_ACTIVATE_VILLAGE_INACTIVE,
+        )
+
     
     if "name" in update_data and update_data["name"] != camera.name:
         existing_name_result = await db.execute(select(Camera).where(Camera.village_id == camera.village_id, Camera.name == update_data["name"]))
@@ -380,14 +376,10 @@ async def update_camera(
                 detail=CameraErrors.NAME_ALREADY_EXISTS,
             )
 
-    stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
     is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
 
     for field, value in update_data.items():
         setattr(camera, field, value)
-
-    if stream_ai_changed:
-        camera.verification_status = CameraVerificationStatus.PENDING
 
     if is_active_changed:
         if update_data["is_active"]:
@@ -411,16 +403,15 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
 
-    if (stream_ai_changed or is_active_changed) and village.is_active:
+    if is_active_changed and village.is_active:
         background_tasks.add_task(
             _sync_camera_update,
             camera.id,
             camera.village_id,
             camera.name,
-            camera.stream_ai if stream_ai_changed else None,
-            camera.is_active if is_active_changed else None,
+            camera.is_active,
         )
-    elif stream_ai_changed or is_active_changed:
+    elif is_active_changed:
         logger.info(
             "Skipping camera sync for %s: village %s is inactive", camera.id, camera.village_id
         )
