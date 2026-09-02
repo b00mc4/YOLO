@@ -32,8 +32,6 @@ _GENERIC_LOGIN_ERROR = Auth.INVALID_CREDENTIALS
 
 _LOGIN_USERNAME_LIMIT = 50
 _LOGIN_USERNAME_WINDOW_SECONDS = 30 * 60
-_FORGOT_PASSWORD_EMAIL_LIMIT = 5
-_FORGOT_PASSWORD_EMAIL_WINDOW_SECONDS = 24 * 60 * 60
 
 _VERIFY_TOKEN_TTL: dict[VerifyType, timedelta] = {
     VerifyType.PASSWORD_RESET: timedelta(minutes=15),
@@ -141,9 +139,6 @@ from app.core.session_manager import session_manager
 async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
     raw_refresh_token = generate_secure_token()
     token_hash = hash_token(raw_refresh_token)
-    
-    session_manager.add_session(user.id, token_hash)
-    access_token = create_access_token(user.id, token_hash)
 
     if remember_me:
         expires_delta = timedelta(days=settings.refresh_token_expire_days)
@@ -158,6 +153,9 @@ async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
     )
     db.add(refresh_token)
     await db.commit()
+
+    session_manager.add_session(user.id, token_hash)
+    access_token = create_access_token(user.id, token_hash)
 
     return access_token, raw_refresh_token
 
@@ -274,11 +272,6 @@ async def request_password_reset(
     db: AsyncSession, background_tasks: BackgroundTasks, email: str
 ) -> None:
     normalized_email = email.strip().lower()
-    get_rate_limiter().check(
-        f"forgot_password:email:{normalized_email}",
-        _FORGOT_PASSWORD_EMAIL_LIMIT,
-        _FORGOT_PASSWORD_EMAIL_WINDOW_SECONDS,
-    )
 
     if email_service.is_email_service_degraded():
         raise HTTPException(
@@ -421,3 +414,9 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
         max_sessions=session_manager.max_sessions,
         sessions=active_sessions
     )
+
+async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
+    stmt = delete(RefreshToken).where(RefreshToken.expired_at < datetime.now(timezone.utc))
+    result = await db.execute(stmt)
+    await db.commit()
+    return result.rowcount

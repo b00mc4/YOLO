@@ -11,7 +11,7 @@ _CAPTURE_TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
 
 class DetectionCreate(BaseModel):
     event_id: uuid.UUID
-    camera_id: uuid.UUID | None
+    camera_id: uuid.UUID
     license_plate: str = Field(max_length=255)
     province: str = Field(max_length=255)
     color: str = Field(max_length=255)

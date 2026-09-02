@@ -508,6 +508,12 @@ def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.U
         if village_id_filter is not None:
             return [Camera.village_id == village_id_filter]
         return []
+
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
+        )
     return [Camera.village_id == current_user.village_id]
 
 def _build_detection_list_scope_filters(

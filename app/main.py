@@ -9,9 +9,10 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import camera_service, camera_verification_service, mediamtx_service, notification_service
+from app.services import auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
+_AUTH_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -30,6 +31,17 @@ async def _notification_cleanup_loop() -> None:
                 logger.info("Notification cleanup: removed %s expired notification(s)", deleted)
         except Exception:
             logger.exception("Notification cleanup loop iteration failed")
+
+async def _auth_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(_AUTH_CLEANUP_INTERVAL_SECONDS)
+        try:
+            async with async_session_maker() as db:
+                deleted = await auth_service.cleanup_expired_refresh_tokens(db)
+            if deleted:
+                logger.info("Auth cleanup: removed %s expired refresh token(s)", deleted)
+        except Exception:
+            logger.exception("Auth cleanup loop iteration failed")
 
 async def _startup_camera_resync_background() -> None:
     for attempt in range(1, _STARTUP_RESYNC_MAX_ATTEMPTS + 1):
@@ -71,9 +83,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     clean_notification_task = asyncio.create_task(_notification_cleanup_loop())
     app.state.startup_clean_notification_task = clean_notification_task
 
+    clean_auth_task = asyncio.create_task(_auth_cleanup_loop())
+    app.state.startup_clean_auth_task = clean_auth_task
+
     yield
 
-    for task in (resync_task, verification_resume_task, clean_notification_task):
+    for task in (resync_task, verification_resume_task, clean_notification_task, clean_auth_task):
         if not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

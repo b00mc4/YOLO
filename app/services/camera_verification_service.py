@@ -13,7 +13,7 @@ from app.services.ai_vision_service import VerificationCheckResult
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL_SECONDS = 10.0
+_POLL_INTERVAL_SECONDS = 30.0
 _MAX_VERIFY_DURATION_SECONDS = 5 * 60.0
 
 _verification_tasks: dict[uuid.UUID, asyncio.Task] = {}
@@ -41,7 +41,7 @@ def is_verification_running(camera_id: uuid.UUID) -> bool:
 
 async def _run_verification_loop(camera_id: uuid.UUID) -> None:
     """
-    Poll AI vision ทุก 1 นาทีจนกว่าจะได้ verified หรือ not_found (404)
+    Poll AI vision ทุก 30 วินาทีจนกว่าจะได้ verified หรือ not_found (404)
     ถ้าเกิน 5 นาทีไม่ได้ผลชัดเจน ตัดสินเป็น failed เอง (timeout ฝั่งเรา)
     เน็ตเราเองมีปัญหาตอน poll ไม่ถือเป็น not_found เด็ดขาด แค่รอรอบถัดไป
     """
