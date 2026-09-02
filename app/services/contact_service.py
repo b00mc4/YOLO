@@ -241,15 +241,11 @@ async def list_contact_directory(
     page: int,
     page_size: int,
 ) -> PaginatedResponse[ContactDirectoryEntry]:
-    contact_count_subquery = (
-        select(func.count())
-        .select_from(Contact)
-        .where(Contact.user_id == User.id)
-        .scalar_subquery()
-    )
-
-    stmt = select(User, Group.name, contact_count_subquery.label("contact_count")).outerjoin(
-        Group, User.village_id == Group.id
+    stmt = (
+        select(User, Group.name, func.count(Contact.id).label("contact_count"))
+        .outerjoin(Group, User.village_id == Group.id)
+        .outerjoin(Contact, User.id == Contact.user_id)
+        .group_by(User.id, Group.id)
     )
     count_stmt = select(func.count()).select_from(User)
 

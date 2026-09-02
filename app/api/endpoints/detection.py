@@ -78,7 +78,7 @@ async def _handle_real_detection(
     raw_camera_id = form.get("camera_id")
 
     is_test = _is_webhook_test(raw_event_id, raw_camera_id)
-    logger.warning("is_test=%s event_id=%r camera_id=%r", is_test, raw_event_id, raw_camera_id)
+    logger.debug("is_test=%s event_id=%r camera_id=%r", is_test, raw_event_id, raw_camera_id)
 
     if is_test:
         return _handle_webhook_test(raw_event_id)

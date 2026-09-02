@@ -73,7 +73,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         if (user is not None and user.hashpassword is not None)
         else hash_security_dummy
     )
-    password_ok = verify_password(password, hash_to_check)
+    password_ok = await verify_password(password, hash_to_check)
 
     credential_failed = (
     user is None
@@ -215,12 +215,12 @@ async def change_password(
     reauth_key = password_reauth_key(current_user.id)
     get_rate_limiter().check(reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS)
 
-    if current_user.hashpassword is None or not verify_password(current_password, current_user.hashpassword):
+    if current_user.hashpassword is None or not await verify_password(current_password, current_user.hashpassword):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.CURRENT_PASSWORD_INCORRECT)
 
     get_rate_limiter().reset(reauth_key)
 
-    current_user.hashpassword = hash_password(new_password)
+    current_user.hashpassword = await hash_password(new_password)
     current_user.password_changed_at = datetime.now(timezone.utc)
 
     await revoke_all_refresh_tokens(db, current_user.id)
@@ -322,7 +322,7 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
     if user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
 
-    user.hashpassword = hash_password(new_password)
+    user.hashpassword = await hash_password(new_password)
     user.password_changed_at = datetime.now(timezone.utc)
     user.is_verify = True
     verify_entry.used = True

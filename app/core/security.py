@@ -16,15 +16,20 @@ _DUMMY_PASSWORD_HASH = _password_hasher.hash(secrets.token_urlsafe(32))
 _ALLOWED_PASSWORD_CHARS = re.compile(r"^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?~]*$")
 
 
-def hash_password(password: str):
-    return _password_hasher.hash(password)
+from fastapi.concurrency import run_in_threadpool
 
 
-def verify_password(password: str, hashed: str):
-    try:
-        return _password_hasher.verify(hashed, password)
-    except (VerificationError, InvalidHash):
-        return False
+async def hash_password(password: str) -> str:
+    return await run_in_threadpool(_password_hasher.hash, password)
+
+
+async def verify_password(password: str, hashed: str) -> bool:
+    def _verify():
+        try:
+            return _password_hasher.verify(hashed, password)
+        except (VerificationError, InvalidHash):
+            return False
+    return await run_in_threadpool(_verify)
 
 
 def create_access_token(user_id: uuid.UUID, jti: str):

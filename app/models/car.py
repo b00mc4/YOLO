@@ -1,6 +1,7 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, false
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, String, false, Index
+
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -11,6 +12,10 @@ from app.models.camera import CameraDirection
 
 class Car(Base):
     __tablename__ = "CarTABLE"
+    __table_args__ = (
+        Index("ix_CarTABLE_village_time", "village_id", "time_detect"),
+        Index("ix_CarTABLE_license_plate_trgm", "license_plate", postgresql_using="gin", postgresql_ops={"license_plate": "gin_trgm_ops"}),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     event_id = Column(UUID(as_uuid=True), nullable=False,unique=True, index=True)

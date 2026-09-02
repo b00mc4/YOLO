@@ -16,6 +16,7 @@ class Whitelist(Base):
             "province",
             unique=True,
         ),
+        Index("ix_WhitelistTABLE_license_plate_trgm", "license_plate", postgresql_using="gin", postgresql_ops={"license_plate": "gin_trgm_ops"}),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

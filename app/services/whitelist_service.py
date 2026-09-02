@@ -10,7 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.whitelist import WhitelistCreate, WhitelistRead, WhitelistUpdate
 from app.services import audit_service, village_service
-from app.core.error_messages import Common, WhitelistErrors
+from app.core.error_messages import Common, WhitelistErrors, Auth
 
 
 async def _resolve_village_id(
@@ -24,7 +24,12 @@ async def _resolve_village_id(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=Common.VILLAGE_ID_REQUIRED_SUPERADMIN,
             )
-        await village_service.get_village(db, requested_village_id)
+        village = await village_service.get_village(db, requested_village_id)
+        if not village.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=Auth.VILLAGE_INACTIVE,
+            )
         return requested_village_id
     return current_user.village_id
 

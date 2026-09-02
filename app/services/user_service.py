@@ -375,7 +375,7 @@ async def reset_user_password(
             detail=UserErrors.PASSWORD_NOT_SET_YET,
         )
 
-    target.hashpassword = hash_password(payload.new_password)
+    target.hashpassword = await hash_password(payload.new_password)
     target.password_changed_at = datetime.now(timezone.utc)
     await auth_service.revoke_all_refresh_tokens(db, target.id)
 
@@ -498,16 +498,6 @@ async def delete_user(
         village_id=target.village_id,
     )
 
-    await db.execute(
-        update(AuditLog).where(AuditLog.user_id == target.id).values(user_id=None)
-    )
-    await db.execute(delete(Verify).where(Verify.user_id == target.id))
-    await db.execute(delete(Contact).where(Contact.user_id == target.id))
-    
-    from app.models.notification import Notification
-    await db.execute(delete(Notification).where(Notification.user_id == target.id))
-    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == target.id))
-    
     # เตะ User ออกจาก Session ใน Memory ทันทีที่โดนลบ
     session_manager.remove_all_sessions(target.id)
     

@@ -250,8 +250,5 @@ async def delete_village(
         village_id=None,
     )
 
-    await db.execute(
-        update(AuditLog).where(AuditLog.village_id == village.id).values(village_id=None)
-    )
     await db.delete(village)
     await db.commit()
