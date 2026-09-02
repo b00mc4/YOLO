@@ -420,3 +420,13 @@ async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
     result = await db.execute(stmt)
     await db.commit()
     return result.rowcount
+
+async def restore_active_sessions(db: AsyncSession) -> int:
+    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    result = await db.execute(stmt)
+    tokens = result.scalars().all()
+    count = 0
+    for token in tokens:
+        session_manager.add_session(token.user_id, token.token_hash)
+        count += 1
+    return count

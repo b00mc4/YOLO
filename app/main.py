@@ -74,6 +74,13 @@ async def _resume_camera_verification_background() -> None:
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    try:
+        async with async_session_maker() as db:
+            restored = await auth_service.restore_active_sessions(db)
+        logger.info("Restored %s active session(s) into memory", restored)
+    except Exception:
+        logger.exception("Failed to restore active sessions on startup")
+
     resync_task = asyncio.create_task(_startup_camera_resync_background())
     app.state.startup_resync_task = resync_task
 

@@ -139,8 +139,10 @@ async def forgot_password(
     from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
     rate_limiter = get_rate_limiter()
     
+    normalized_email = payload.email.strip().lower()
+
     try:
-        rate_limiter.check(f"forgot_cooldown:{payload.email}", 1, 300)
+        rate_limiter.check(f"forgot_cooldown:{normalized_email}", 1, 300)
     except RateLimitExceeded as e:
         minutes_left = int(e.retry_after_seconds // 60) + 1
         raise HTTPException(
@@ -149,14 +151,14 @@ async def forgot_password(
         )
         
     try:
-        rate_limiter.check(f"forgot_daily:{payload.email}", 3, 86400)
+        rate_limiter.check(f"forgot_daily:{normalized_email}", 3, 86400)
     except RateLimitExceeded:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="คุณขอรหัสผ่านใหม่เกิน 3 ครั้งแล้ว กรุณาลองใหม่ในวันพรุ่งนี้"
         )
 
-    await auth_service.request_password_reset(db, background_tasks, payload.email)
+    await auth_service.request_password_reset(db, background_tasks, normalized_email)
 
 
 @router.post(
