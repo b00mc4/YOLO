@@ -384,10 +384,13 @@ async def create_detection(
     try:
         event_payload = _build_detection_event_payload(request, camera, car)
         event_data = event_payload.model_dump(mode="json")
+        logger.warning(f"[SSE DEBUG] Publishing detection_created for car {car.id}, is_blacklist={is_blacklist}, is_whitelist={is_whitelist}, village={camera.village_id}")
         await channel_service.alerts.publish(camera.village_id, "detection_created", event_data)
         if is_blacklist:
+            logger.warning(f"[SSE DEBUG] Publishing blacklist_alert for car {car.id}")
             await channel_service.alerts.publish(camera.village_id, "blacklist_alert", event_data)
         if is_whitelist:
+            logger.warning(f"[SSE DEBUG] Publishing whitelist_alert for car {car.id}")
             await channel_service.alerts.publish(camera.village_id, "whitelist_alert", event_data)
 
         global_payload = _build_global_detection_event_payload(request, camera, car)
