@@ -360,7 +360,7 @@ async def create_detection(
             "race on duplicate detection event, returning existing record: event_id=%s",
             payload.event_id,
         )
-        return DetectionCreateAck(event_id=existing.event_id), False
+        return DetectionCreateAck(event_id=existing.event_id if existing else payload.event_id), False
 
     await db.refresh(car)
 
