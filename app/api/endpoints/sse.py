@@ -35,6 +35,31 @@ def _revalidation_due(last_revalidated_at: float) -> bool:
     return monotonic() - last_revalidated_at >= settings.sse_revalidation_interval_seconds
 
 
+async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id: uuid.UUID | None, queue: asyncio.Queue | None):
+    last_revalidated_at = monotonic()
+    while True:
+        if await request.is_disconnected():
+            break
+
+        if _revalidation_due(last_revalidated_at):
+            if not await session_validation_service.is_session_still_valid(user_id, village_id):
+                break
+            last_revalidated_at = monotonic()
+
+        if queue is None:
+            await asyncio.sleep(_PING_INTERVAL_SECONDS)
+            yield {"event": "ping", "data": ""}
+            continue
+
+        try:
+            event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
+            if event is CLOSE_SENTINEL:
+                break
+            yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
+        except asyncio.TimeoutError:
+            yield {"event": "ping", "data": ""}
+
+
 @router.post("/ticket", response_model=SSETicketResponse, status_code=status.HTTP_201_CREATED)
 async def create_sse_ticket(
     current_user: User = Depends(require_roles(*_ALLOWED_ROLES)),
@@ -55,24 +80,9 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
     queue = channel_service.alerts.subscribe(village_id)
 
     async def event_generator():
-        last_revalidated_at = monotonic()
         try:
-            while True:
-                if await request.is_disconnected():
-                    break
-
-                if _revalidation_due(last_revalidated_at):
-                    if not await session_validation_service.is_session_still_valid(user_id, village_id):
-                        break
-                    last_revalidated_at = monotonic()
-
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
-                    if event is CLOSE_SENTINEL:
-                        break
-                    yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
-                except asyncio.TimeoutError:
-                    yield {"event": "ping", "data": ""}
+            async for event in _base_event_generator(request, user_id, village_id, queue):
+                yield event
         finally:
             channel_service.alerts.unsubscribe(village_id, queue)
             channel_service.alerts.unregister_connection(user_id)
@@ -104,24 +114,9 @@ async def stream_security_alerts(request: Request, ticket: str = Query(...)):
     queue = channel_service.security_alerts.subscribe(village_id)
 
     async def event_generator():
-        last_revalidated_at = monotonic()
         try:
-            while True:
-                if await request.is_disconnected():
-                    break
-
-                if _revalidation_due(last_revalidated_at):
-                    if not await session_validation_service.is_session_still_valid(user_id, village_id):
-                        break
-                    last_revalidated_at = monotonic()
-
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
-                    if event is CLOSE_SENTINEL:
-                        break
-                    yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
-                except asyncio.TimeoutError:
-                    yield {"event": "ping", "data": ""}
+            async for event in _base_event_generator(request, user_id, village_id, queue):
+                yield event
         finally:
             channel_service.security_alerts.unsubscribe(village_id, queue)
             channel_service.security_alerts.unregister_connection(user_id)
@@ -154,7 +149,6 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
     watcher_queue = presence_service.register_watcher(ticket_data)
 
     async def event_generator():
-        last_revalidated_at = monotonic()
         try:
             initial_snapshot = await presence_service.build_snapshot_for_ticket(ticket_data)
             if initial_snapshot is not None:
@@ -163,34 +157,8 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
                     "data": json.dumps(initial_snapshot, default=str),
                 }
 
-            while True:
-                if await request.is_disconnected():
-                    break
-
-                if _revalidation_due(last_revalidated_at):
-                    if not await session_validation_service.is_session_still_valid(
-                        ticket_data.user_id, ticket_data.village_id
-                    ):
-                        break
-                    last_revalidated_at = monotonic()
-
-                if watcher_queue is None:
-                    await asyncio.sleep(_PING_INTERVAL_SECONDS)
-                    yield {"event": "ping", "data": ""}
-                    continue
-
-                try:
-                    event = await asyncio.wait_for(
-                        watcher_queue.get(), timeout=_PING_INTERVAL_SECONDS
-                    )
-                    if event is CLOSE_SENTINEL:
-                        break
-                    yield {
-                        "event": event["event"],
-                        "data": json.dumps(event["data"], default=str),
-                    }
-                except asyncio.TimeoutError:
-                    yield {"event": "ping", "data": ""}
+            async for event in _base_event_generator(request, ticket_data.user_id, ticket_data.village_id, watcher_queue):
+                yield event
         finally:
             presence_service.unregister_watcher(ticket_data, watcher_queue)
             await presence_service.unregister_connection(conn_id)
