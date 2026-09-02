@@ -90,6 +90,7 @@ class DetectionDashboardRead(BaseModel):
     whitelist_detections_today: int
     entry_detections_today: int
     exit_detections_today: int
+    internal_detections_today: int
     top_repeated_plates: list[RepeatedPlateEntry]
     latest_detections: list[CarRead]
 

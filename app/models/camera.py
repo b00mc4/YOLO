@@ -19,6 +19,7 @@ class CameraVerificationStatus(str, enum.Enum):
 class CameraDirection(str, enum.Enum):
     ENTRY = "entry"
     EXIT = "exit"
+    INTERNAL = "internal"
 
 
 class Camera(Base):

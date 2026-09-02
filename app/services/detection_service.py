@@ -555,6 +555,7 @@ async def get_today_dashboard(
             func.count(case((Car.is_whitelist.is_(True), 1))).label("whitelist"),
             func.count(case((Car.direction == CameraDirection.ENTRY, 1))).label("entry"),
             func.count(case((Car.direction == CameraDirection.EXIT, 1))).label("exit"),
+            func.count(case((Car.direction == CameraDirection.INTERNAL, 1))).label("internal"),
         )
         .select_from(Car)
         .join(Camera, Car.camera_id == Camera.id)
@@ -602,6 +603,7 @@ async def get_today_dashboard(
         whitelist_detections_today=row.whitelist,
         entry_detections_today=row.entry,
         exit_detections_today=row.exit,
+        internal_detections_today=row.internal,
         top_repeated_plates=top_repeated_plates,
         latest_detections=latest_detections,
     )

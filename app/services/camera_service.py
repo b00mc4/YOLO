@@ -787,4 +787,4 @@ async def push_cameras_online(village_id: uuid.UUID, camera_ids: list[uuid.UUID]
 
     for camera, _, failed_services in outcomes:
         if failed_services:
-            await _notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
+            await notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
