@@ -192,63 +192,45 @@ async def update_village(
     return village
 
 
-async def _verify_village_hard_delete_eligible(db: AsyncSession, village: Group) -> None:
-    camera_count = await db.execute(
-        select(func.count()).select_from(Camera).where(Camera.village_id == village.id)
-    )
-    if camera_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="หมู่บ้านนี้มีกล้องผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    user_count = await db.execute(
-        select(func.count()).select_from(User).where(User.village_id == village.id)
-    )
-    if user_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="หมู่บ้านนี้มีผู้ใช้งานผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    blacklist_count = await db.execute(
-        select(func.count()).select_from(Blacklist).where(Blacklist.village_id == village.id)
-    )
-    if blacklist_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="หมู่บ้านนี้มีรายการ blacklist ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-    whitelist_count = await db.execute(
-        select(func.count()).select_from(Whitelist).where(Whitelist.village_id == village.id)
-    )
-    if whitelist_count.scalar_one() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="หมู่บ้านนี้มีรายการ whitelist ผูกอยู่ ไม่สามารถลบถาวรได้ กรุณาปิดการใช้งานแทน",
-        )
-
-
 async def delete_village(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     village_id: uuid.UUID,
 ) -> None:
     village = await get_village(db, village_id)
-    await _verify_village_hard_delete_eligible(db, village)
+
+    # Fetch cameras before deleting to sync with AI Vision
+    cameras_result = await db.execute(select(Camera).where(Camera.village_id == village_id))
+    cameras_to_delete = cameras_result.scalars().all()
+    camera_sync_tasks = []
+    for cam in cameras_to_delete:
+        camera_sync_tasks.append((cam.id, cam.village_id, cam.name))
 
     village_name = village.name
+
+    # Manually cascade delete to prevent ForeignKey constraint errors
+    await db.execute(delete(Blacklist).where(Blacklist.village_id == village_id))
+    await db.execute(delete(Whitelist).where(Whitelist.village_id == village_id))
+    await db.execute(delete(Camera).where(Camera.village_id == village_id))
+    await db.execute(delete(User).where(User.village_id == village_id))
 
     await audit_service.log_action(
         db,
         request,
         action="village_deleted",
-        detail=f"permanently deleted unused village: {village_name}",
+        detail=f"permanently deleted village (and all related data): {village_name}",
         user_id=current_user.id,
         village_id=None,
     )
 
     await db.delete(village)
     await db.commit()
+
+    # Cancel verifications and trigger sync deletes (AI Vision + Mediamtx)
+    from app.services import camera_verification_service
+    from app.services.camera_service import _sync_camera_delete
+    for cam_id, v_id, c_name in camera_sync_tasks:
+        camera_verification_service.cancel_verification(cam_id)
+        background_tasks.add_task(_sync_camera_delete, cam_id, v_id, c_name)

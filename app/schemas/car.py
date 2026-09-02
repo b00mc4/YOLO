@@ -41,6 +41,8 @@ class CarRead(BaseModel):
     event_id: uuid.UUID
     camera_id: uuid.UUID | None
     camera_name: str | None
+    village_id: uuid.UUID | None = None
+    village_name: str | None = None
     license_plate: str
     province: str
     color: str

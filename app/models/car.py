@@ -21,6 +21,7 @@ class Car(Base):
     event_id = Column(UUID(as_uuid=True), nullable=False,unique=True, index=True)
     camera_id = Column(UUID(as_uuid=True), ForeignKey("CameraTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
     village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id", ondelete="SET NULL"), nullable=True, index=True)
+    village_name = Column(String(255), nullable=True)
     camera_name = Column(String(255), nullable=True)
     camera_lat = Column(Float(53), nullable=True)
     camera_long = Column(Float(53), nullable=True)

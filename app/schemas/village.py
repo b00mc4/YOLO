@@ -6,12 +6,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.user import UserRole
 from app.schemas.camera import CameraBasicRead
 
-_ADDRESS_PATTERN = re.compile(r"^[A-Za-z0-9ก-ฮะ-์เ-ไ\s\/\.\,\-]+$")
+_ADDRESS_PATTERN = re.compile(r"^[A-Za-z0-9ก-ฮะ-๙\s\/\.\,\-]+$")
+_NO_EMOJI_REGEX = re.compile(r"^[\u0E00-\u0E7F\x20-\x7E]+$")
 
 
 class VillageCreate(BaseModel):
     name: str = Field(max_length=255)
     address: str = Field(max_length=255)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not _NO_EMOJI_REGEX.match(v):
+            raise ValueError("ชื่อรับเฉพาะอักษรไทย อังกฤษ ตัวเลข และอักขระพิเศษ (ห้ามใช้อีโมจิ)")
+        return v
 
     @field_validator("address")
     @classmethod
@@ -28,6 +36,13 @@ class VillageUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     address: str | None = Field(default=None, max_length=255)
     is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        if v is not None and not _NO_EMOJI_REGEX.match(v):
+            raise ValueError("ชื่อรับเฉพาะอักษรไทย อังกฤษ ตัวเลข และอักขระพิเศษ (ห้ามใช้อีโมจิ)")
+        return v
 
     @field_validator("address")
     @classmethod

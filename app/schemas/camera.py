@@ -1,9 +1,43 @@
 from __future__ import annotations
 import uuid
+import re
+from typing import Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.camera import CameraDirection, CameraVerificationStatus
 from app.core.url_utils import normalize_rtsp_url
+
+_NO_EMOJI_REGEX = re.compile(r"^[\u0E00-\u0E7F\x20-\x7E]+$")
+
+def _validate_coordinate(v: Any, max_len: int, min_val: float, max_val: float) -> float:
+    if v is None:
+        return v
+    v_str = str(v).strip()
+    if len(v_str) > max_len:
+        raise ValueError(f"ความยาวห้ามเกิน {max_len} ตัวอักษร")
+    if v_str.count("-") > 1:
+        raise ValueError("มีเครื่องหมาย - ได้แค่ตัวเดียว")
+    if "-" in v_str and not v_str.startswith("-"):
+        raise ValueError("เครื่องหมาย - ต้องอยู่หน้าสุดเท่านั้น")
+    if v_str.count(".") > 1:
+        raise ValueError("มีเครื่องหมาย . ได้แค่ตัวเดียว")
+    if v_str.startswith("-."):
+        raise ValueError("ห้ามมี . ติดกับ - ต้องมีตัวเลขคั่น")
+    if v_str.startswith("."):
+        raise ValueError("ห้ามนำหน้าด้วย .")
+        
+    if v_str.endswith("."):
+        v_str += "0000000"
+        
+    try:
+        val = float(v_str)
+    except ValueError:
+        raise ValueError("รูปแบบพิกัดไม่ถูกต้อง")
+        
+    if not (min_val <= val <= max_val):
+        raise ValueError(f"ค่าต้องอยู่ระหว่าง {min_val} ถึง {max_val}")
+        
+    return val
 
 
 class CameraCreate(BaseModel):
@@ -13,6 +47,23 @@ class CameraCreate(BaseModel):
     long: float = Field(ge=-180, le=180)
     stream_ai: str = Field(max_length=1000)
     direction: CameraDirection
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if not _NO_EMOJI_REGEX.match(v):
+            raise ValueError("ชื่อรับเฉพาะอักษรไทย อังกฤษ ตัวเลข และอักขระพิเศษ (ห้ามใช้อีโมจิ)")
+        return v
+
+    @field_validator("lat", mode="before")
+    @classmethod
+    def validate_lat(cls, v: Any) -> float:
+        return _validate_coordinate(v, max_len=20, min_val=-90.0, max_val=90.0)
+
+    @field_validator("long", mode="before")
+    @classmethod
+    def validate_long(cls, v: Any) -> float:
+        return _validate_coordinate(v, max_len=20, min_val=-180.0, max_val=180.0)
 
     @field_validator("stream_ai")
     @classmethod
@@ -26,6 +77,27 @@ class CameraUpdate(BaseModel):
     long: float | None = Field(default=None, ge=-180, le=180)
     direction: CameraDirection | None = None
     is_active: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str | None) -> str | None:
+        if v is not None and not _NO_EMOJI_REGEX.match(v):
+            raise ValueError("ชื่อรับเฉพาะอักษรไทย อังกฤษ ตัวเลข และอักขระพิเศษ (ห้ามใช้อีโมจิ)")
+        return v
+
+    @field_validator("lat", mode="before")
+    @classmethod
+    def validate_lat(cls, v: Any) -> float | None:
+        if v is None:
+            return v
+        return _validate_coordinate(v, max_len=11, min_val=-90.0, max_val=90.0)
+
+    @field_validator("long", mode="before")
+    @classmethod
+    def validate_long(cls, v: Any) -> float | None:
+        if v is None:
+            return v
+        return _validate_coordinate(v, max_len=12, min_val=-180.0, max_val=180.0)
 
 
 class CameraRead(BaseModel):

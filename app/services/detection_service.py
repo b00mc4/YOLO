@@ -61,6 +61,8 @@ def _to_car_read(car: Car, request: Request) -> CarRead:
         event_id=car.event_id,
         camera_id=car.camera_id,
         camera_name=car.camera_name,
+        village_id=car.village_id,
+        village_name=car.village_name,
         license_plate=car.license_plate,
         province=car.province,
         color=car.color,
@@ -304,11 +306,15 @@ async def create_detection(
             detail=DetectionErrors.STORE_IMAGE_FAILED,
         )
 
+    group_res = await db.execute(select(Group.name).where(Group.id == camera.village_id))
+    village_name = group_res.scalar_one_or_none()
+
     car = Car(
         id=car_id,
         event_id=payload.event_id,
         camera_id=camera.id,
         village_id=camera.village_id,
+        village_name=village_name,
         camera_name=camera.name,
         camera_lat=camera.lat,
         camera_long=camera.long,
@@ -506,7 +512,7 @@ def _today_bangkok_bounds() -> tuple[datetime, datetime, datetime]:
 def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.UUID | None) -> list:
     if current_user.role == UserRole.SUPERADMIN:
         if village_id_filter is not None:
-            return [Camera.village_id == village_id_filter]
+            return [Car.village_id == village_id_filter]
         return []
 
     if village_id_filter is not None and village_id_filter != current_user.village_id:
@@ -514,7 +520,7 @@ def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.U
             status_code=status.HTTP_403_FORBIDDEN,
             detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
         )
-    return [Camera.village_id == current_user.village_id]
+    return [Car.village_id == current_user.village_id]
 
 def _build_detection_list_scope_filters(
     current_user: User, village_id_filter: uuid.UUID | None
@@ -548,7 +554,6 @@ async def get_today_dashboard(
         select(func.count())
         .select_from(
             select(Car.license_plate, Car.province)
-            .join(Camera, Car.camera_id == Camera.id)
             .where(*base_filters)
             .distinct()
             .subquery()
@@ -564,13 +569,11 @@ async def get_today_dashboard(
             func.count(case((Car.direction == CameraDirection.INTERNAL, 1))).label("internal"),
         )
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
     )
 
     top_repeated_query = (
         select(Car.license_plate, Car.province, func.count())
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .group_by(Car.license_plate, Car.province)
         .having(func.count() > 1)
@@ -580,7 +583,6 @@ async def get_today_dashboard(
 
     latest_query = (
         select(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*base_filters)
         .order_by(Car.time_detect.desc())
         .limit(latest_limit)
@@ -599,6 +601,7 @@ async def get_today_dashboard(
         RepeatedPlateEntry(license_plate=plate, province=province, count=count)
         for plate, province, count in top_repeated_result.all()
     ]
+    
     latest_detections = [_to_car_read(item, request) for item in latest_result.scalars().all()]
 
     return DetectionDashboardRead(
@@ -723,7 +726,6 @@ async def get_route_tracking(
     total_dates_result = await db.execute(
         select(func.count(func.distinct(bangkok_date_expr)))
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*filters)
     )
     total_dates = total_dates_result.scalar_one()
@@ -731,7 +733,6 @@ async def get_route_tracking(
     total_detections_result = await db.execute(
         select(func.count())
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*filters)
     )
     total_detections = total_detections_result.scalar_one()
@@ -739,7 +740,6 @@ async def get_route_tracking(
     page_dates_result = await db.execute(
         select(bangkok_date_expr.label("d"))
         .select_from(Car)
-        .join(Camera, Car.camera_id == Camera.id)
         .where(*filters)
         .group_by(bangkok_date_expr)
         .order_by(bangkok_date_expr.desc())

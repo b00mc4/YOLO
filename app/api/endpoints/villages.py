@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
@@ -59,8 +59,15 @@ async def update_village(
 async def delete_village(
     village_id: uuid.UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
+    confirm: bool = Query(False, description="ยืนยันการลบแบบถอนรากถอนโคน (จะลบทั้งกล้อง ผู้ใช้ และประวัติทั้งหมด)"),
     current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    await village_service.delete_village(db, request, current_user, village_id)
+    if not confirm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="กรุณาส่ง confirm=true เพื่อยืนยันการลบหมู่บ้านถาวร",
+        )
+    await village_service.delete_village(db, request, background_tasks, current_user, village_id)
     return MessageResponse(detail="ลบหมู่บ้านถาวรสำเร็จ")
