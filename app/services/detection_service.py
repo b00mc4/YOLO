@@ -409,6 +409,7 @@ async def list_detections(
     request: Request,
     current_user: User,
     village_id: uuid.UUID | None,
+    village_name: str | None,
     camera_id: uuid.UUID | None,
     license_plate: str | None,
     province: str | None,
@@ -424,6 +425,8 @@ async def list_detections(
     scope_filters = _build_detection_list_scope_filters(current_user, village_id)
     stmt = select(Car).where(*scope_filters)
 
+    if village_name is not None:
+        stmt = stmt.where(Car.village_name.ilike(f"%{village_name}%"))
     if camera_id is not None:
         stmt = stmt.where(Car.camera_id == camera_id)
     if license_plate is not None:
