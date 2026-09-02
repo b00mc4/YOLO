@@ -26,6 +26,7 @@ class Camera(Base):
     __tablename__ = "CameraTABLE"
     __table_args__ = (
         UniqueConstraint("stream_ai", name="uq_CameraTABLE_stream_ai"),
+        UniqueConstraint("village_id", "name", name="uq_CameraTABLE_village_id_name"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

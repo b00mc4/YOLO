@@ -71,7 +71,8 @@ async def _run_verification_loop(camera_id: uuid.UUID) -> None:
     except asyncio.CancelledError:
         raise
     finally:
-        _verification_tasks.pop(camera_id, None)
+        if _verification_tasks.get(camera_id) is asyncio.current_task():
+            _verification_tasks.pop(camera_id, None)
 
 
 async def _finalize(
