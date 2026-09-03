@@ -108,9 +108,9 @@ def _to_car_detail_read(car: Car, camera: Camera, village: Group, request: Reque
     )
 
 
-async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
+async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> tuple[Camera, str | None]:
     result = await db.execute(
-        select(Camera, Group.is_active)
+        select(Camera, Group.is_active, Group.name)
         .join(Group, Camera.village_id == Group.id)
         .where(Camera.id == camera_id)
     )
@@ -118,7 +118,7 @@ async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=CameraErrors.NOT_FOUND)
 
-    camera, village_is_active = row
+    camera, village_is_active, village_name = row
 
     if not village_is_active:
         raise HTTPException(
@@ -130,7 +130,7 @@ async def _get_camera_or_404(db: AsyncSession, camera_id: uuid.UUID) -> Camera:
             status_code=status.HTTP_409_CONFLICT,
             detail=DetectionErrors.CAMERA_INACTIVE,
         )
-    return camera
+    return camera, village_name
 
 
 async def _find_existing_car_by_event_id(db: AsyncSession, event_id: uuid.UUID) -> Car | None:
@@ -256,7 +256,7 @@ async def create_detection(
         )
         return DetectionCreateAck(event_id=existing.event_id), False
 
-    camera = await _get_camera_or_404(db, payload.camera_id)
+    camera, village_name = await _get_camera_or_404(db, payload.camera_id)
 
     if camera.verification_status == CameraVerificationStatus.PENDING:
         try:
@@ -305,9 +305,6 @@ async def create_detection(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=DetectionErrors.STORE_IMAGE_FAILED,
         )
-
-    group_res = await db.execute(select(Group.name).where(Group.id == camera.village_id))
-    village_name = group_res.scalar_one_or_none()
 
     car = Car(
         id=car_id,
@@ -367,6 +364,10 @@ async def create_detection(
             payload.event_id,
         )
         return DetectionCreateAck(event_id=existing.event_id if existing else payload.event_id), False
+    except Exception:
+        await db.rollback()
+        await _cleanup_written_images(written_paths)
+        raise
 
     await db.refresh(car)
 

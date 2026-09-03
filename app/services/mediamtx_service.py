@@ -5,6 +5,7 @@ import uuid
 import httpx
 from app.core.config import get_settings
 from app.services import mediamtx_auth_service
+from app.core.alert_cooldown import InMemorySingleWorkerCooldown
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ _COLD_START_POLL_INTERVAL_SECONDS = 1.0
 _COLD_START_POLL_BUFFER_SECONDS = 2.0
 _COLD_START_MAX_WAIT_SECONDS = _SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS + _COLD_START_POLL_BUFFER_SECONDS
 _BYTES_CONFIRM_WINDOW_SECONDS = 2.0
+_TRIGGER_COOLDOWN_SECONDS = 30.0
+_trigger_cooldown = InMemorySingleWorkerCooldown()
 
 
 def _auth() -> httpx.BasicAuth:
@@ -162,6 +165,10 @@ async def check_source_alive(camera_id: uuid.UUID) -> bool | None:
 
     if baseline["ready"]:
         return await _confirm_bytes_flowing(camera_id, baseline["bytes_received"])
+
+    if not _trigger_cooldown.allow(str(camera_id), cooldown_seconds=_TRIGGER_COOLDOWN_SECONDS):
+        logger.info("MediaMTX trigger skipped for camera_id=%s due to cooldown", camera_id)
+        return False
 
     became_ready = await _wait_for_ready_after_trigger(camera_id)
     if not became_ready:

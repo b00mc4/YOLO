@@ -9,13 +9,14 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service
+from app.services import ai_vision_service, auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 _AUTH_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 _STARTUP_RESYNC_MAX_ATTEMPTS = 3
 _STARTUP_RESYNC_BACKOFF_BASE_SECONDS = 2.0
@@ -102,6 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 await task
     
     await mediamtx_service.close()
+    await ai_vision_service.close()
 
 
 app = FastAPI(

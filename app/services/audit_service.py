@@ -26,6 +26,7 @@ async def log_action(
     detail: str,
     user_id: uuid.UUID | None = None,
     village_id: uuid.UUID | None = None,
+    actor_username: str | None = None,
 ):
     if request is not None:
         ip_address = get_client_ip(request)
@@ -34,8 +35,7 @@ async def log_action(
         ip_address = _BACKGROUND_IP_ADDRESS
         user_agent = _BACKGROUND_USER_AGENT
 
-    actor_username = None
-    if user_id is not None:
+    if actor_username is None and user_id is not None:
         user_result = await db.execute(select(User.username).where(User.id == user_id))
         actor_username = user_result.scalar_one_or_none()
 

@@ -9,6 +9,10 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_SECONDS = 5.0
+_client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
+
+async def close() -> None:
+    await _client.aclose()
 
 class VerificationCheckResult(str, enum.Enum):
     VERIFIED = "verified"
@@ -24,16 +28,15 @@ async def push_camera_config(camera_id: uuid.UUID, stream_ai: str) -> bool:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                url,
-                json={
-    "camera_id": str(camera_id),
-    "camera_url": stream_ai,
-    "webhook_url": derive_webhook_url(),
-},
-                headers={"X-API-Key": settings.ai_vision_api_key},
-            )
+        response = await _client.post(
+            url,
+            json={
+                "camera_id": str(camera_id),
+                "camera_url": stream_ai,
+                "webhook_url": derive_webhook_url(),
+            },
+            headers={"X-API-Key": settings.ai_vision_api_key},
+        )
     except httpx.HTTPError as exc:
         logger.warning("ai vision push_camera_config request failed for %s: %s", camera_id, exc)
         return False
@@ -57,12 +60,11 @@ async def set_camera_active_status(camera_id: uuid.UUID, is_active: bool) -> boo
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/status"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                url,
-                json={"camera_id": str(camera_id), "is_active": is_active},
-                headers={"X-API-Key": settings.ai_vision_api_key},
-            )
+        response = await _client.post(
+            url,
+            json={"camera_id": str(camera_id), "is_active": is_active},
+            headers={"X-API-Key": settings.ai_vision_api_key},
+        )
     except httpx.HTTPError as exc:
         logger.warning("ai vision set_camera_active_status request failed for %s: %s", camera_id, exc)
         return False
@@ -81,8 +83,7 @@ async def check_camera_verification(camera_id: uuid.UUID) -> VerificationCheckRe
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/{camera_id}"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.get(url, headers={"X-API-Key": settings.ai_vision_api_key})
+        response = await _client.get(url, headers={"X-API-Key": settings.ai_vision_api_key})
     except httpx.HTTPError as exc:
         logger.warning("ai vision check_camera_verification request failed for %s: %s", camera_id, exc)
         return VerificationCheckResult.UNREACHABLE
@@ -119,8 +120,7 @@ async def delete_camera(camera_id: uuid.UUID) -> CameraDeleteResult:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/{camera_id}"
 
     try:
-        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            response = await client.delete(url, headers={"X-API-Key": settings.ai_vision_api_key})
+        response = await _client.delete(url, headers={"X-API-Key": settings.ai_vision_api_key})
     except httpx.HTTPError as exc:
         logger.warning("ai vision delete_camera request failed for %s: %s", camera_id, exc)
         return CameraDeleteResult.UNREACHABLE
