@@ -446,7 +446,7 @@ def _build_resync_scope_filters(
             return [Camera.village_id == village_id_filter]
         return []
 
-    if village_id_filter is not None:
+    if village_id_filter is not None and village_id_filter != current_user.village_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,

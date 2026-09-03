@@ -21,7 +21,7 @@ async def create_village(
     current_user: User,
     payload: VillageCreate,
 ) -> Group:
-    village = Group(name=payload.name, is_active=True)
+    village = Group(name=payload.name, address=payload.address, is_active=True)
     db.add(village)
     await db.flush()
 
@@ -76,6 +76,7 @@ async def get_village_detail(
     return VillageDetailRead(
         id=village.id,
         name=village.name,
+        address=village.address,
         is_active=village.is_active,
         created_at=village.created_at,
         cameras=[CameraBasicRead.model_validate(camera) for camera in cameras],

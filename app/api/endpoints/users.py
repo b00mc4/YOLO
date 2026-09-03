@@ -149,26 +149,6 @@ async def request_user_email_change(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
-    rate_limiter = get_rate_limiter()
-    
-    try:
-        rate_limiter.check(f"change_email_cooldown:{user_id}", 1, 300)
-    except RateLimitExceeded as e:
-        minutes_left = int(e.retry_after_seconds // 60) + 1
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"กรุณารออีก {minutes_left} นาที ก่อนขอเปลี่ยนอีเมลได้อีกครั้ง"
-        )
-        
-    try:
-        rate_limiter.check(f"change_email_daily:{user_id}", 3, 86400)
-    except RateLimitExceeded:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="คุณขอเปลี่ยนอีเมลเกิน 3 ครั้งแล้ว กรุณาลองใหม่ในวันพรุ่งนี้"
-        )
-
     await user_service.request_email_change(db, request, background_tasks, current_user, user_id, payload)
     return MessageResponse(detail="ส่งลิงก์ยืนยันไปที่อีเมลใหม่แล้ว กรุณายืนยันภายใน 24 ชั่วโมง")
 
