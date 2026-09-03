@@ -133,7 +133,7 @@ class RouteTrackingDetectionEntry(BaseModel):
     detection_id: uuid.UUID
     camera_id: uuid.UUID | None
     camera_name: str
-    village_id: uuid.UUID
+    village_id: uuid.UUID | None
     village_name: str
     lat: float
     long: float

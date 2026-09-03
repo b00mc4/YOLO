@@ -3,6 +3,7 @@ import uuid
 import re
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.contact import Contact, ContactType
 from app.models.group import Group
@@ -77,14 +78,14 @@ async def _resolve_target_user(
 
 async def _get_contact_or_404(db: AsyncSession, contact_id: uuid.UUID) -> tuple[Contact, User]:
     result = await db.execute(
-        select(Contact, User)
-        .join(User, Contact.user_id == User.id)
+        select(Contact)
+        .options(joinedload(Contact.user))
         .where(Contact.id == contact_id)
     )
-    row = result.first()
-    if row is None:
+    contact = result.scalar_one_or_none()
+    if contact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=ContactErrors.NOT_FOUND)
-    return row[0], row[1]
+    return contact, contact.user
 
 
 def _verify_contact_write_scope(
