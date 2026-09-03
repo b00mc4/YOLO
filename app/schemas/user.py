@@ -103,6 +103,8 @@ class UserSummary(BaseModel):
     id: uuid.UUID
     username: str
     role: UserRole
+    village_id: uuid.UUID | None
+    village_name: str | None
     is_active: bool
     is_verify: bool
     created_at: datetime
@@ -116,6 +118,7 @@ class UserDetail(BaseModel):
     email: EmailStr
     role: UserRole
     village_id: uuid.UUID | None
+    village_name: str | None
     avatar_url: str | None
     is_active: bool
     is_verify: bool

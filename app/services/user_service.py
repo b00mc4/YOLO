@@ -149,6 +149,11 @@ async def _to_user_detail(db: AsyncSession, request: Request, user: User) -> Use
     )
     contact_count = contact_count_result.scalar_one()
 
+    village_name = None
+    if user.village_id:
+        village_result = await db.execute(select(Group.name).where(Group.id == user.village_id))
+        village_name = village_result.scalar_one_or_none()
+
     return UserDetail(
         id=user.id,
         username=user.username,
@@ -156,6 +161,7 @@ async def _to_user_detail(db: AsyncSession, request: Request, user: User) -> Use
         email=user.email,
         role=user.role,
         village_id=user.village_id,
+        village_name=village_name,
         is_active=user.is_active,
         is_verify=user.is_verify,
         created_at=user.created_at,
@@ -277,27 +283,30 @@ async def list_users(
     total = count_result.scalar_one()
 
     stmt = (
-        select(User)
+        select(User, Group.name)
+        .outerjoin(Group, User.village_id == Group.id)
         .where(*filters)
         .order_by(User.fullname)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
     result = await db.execute(stmt)
-    items = result.scalars().all()
+    items = result.all()
 
     return PaginatedResponse[UserSummary](
         items=[
             UserSummary(
-                id=item.id,
-                username=item.username,
-                role=item.role,
-                is_active=item.is_active,
-                is_verify=item.is_verify,
-                created_at=item.created_at,
-                avatar_url=_build_avatar_url(request, item),
+                id=user.id,
+                username=user.username,
+                role=user.role,
+                village_id=user.village_id,
+                village_name=village_name,
+                is_active=user.is_active,
+                is_verify=user.is_verify,
+                created_at=user.created_at,
+                avatar_url=_build_avatar_url(request, user),
             )
-            for item in items
+            for user, village_name in items
         ],                                 
         total=total,
         page=page,

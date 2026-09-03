@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import math
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -44,7 +45,7 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 
 async def account_locked_handler(request: Request, exc: AccountLocked):
     logger.warning("Login attempt blocked on locked account: %s %s", request.method, request.url.path)
-    retry_after = int(exc.retry_after_seconds) + 1
+    retry_after = math.ceil(exc.retry_after_seconds)
     return JSONResponse(
         status_code=status.HTTP_423_LOCKED,
         content=ErrorResponse(

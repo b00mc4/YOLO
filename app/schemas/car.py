@@ -124,21 +124,7 @@ class DetectionEventCameraGlobal(DetectionEventCamera):
 class DetectionEventPayloadGlobal(DetectionEventPayload):
     camera: DetectionEventCameraGlobal
 
-class LiveCaptureEntry(BaseModel):
-    id: uuid.UUID
-    time_detect: datetime
-    license_plate: str
-    province: str
-    color: str
-    image_crop: str
-    image_full: str
 
-
-class CameraLiveRead(BaseModel):
-    camera_id: uuid.UUID | None
-    camera_name: str
-    is_active: bool
-    latest_captures: list[LiveCaptureEntry]
 
 class DetectionCreateAck(BaseModel):
     event_id: uuid.UUID

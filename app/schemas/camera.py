@@ -90,14 +90,14 @@ class CameraUpdate(BaseModel):
     def validate_lat(cls, v: Any) -> float | None:
         if v is None:
             return v
-        return _validate_coordinate(v, max_len=11, min_val=-90.0, max_val=90.0)
+        return _validate_coordinate(v, max_len=20, min_val=-90.0, max_val=90.0)
 
     @field_validator("long", mode="before")
     @classmethod
     def validate_long(cls, v: Any) -> float | None:
         if v is None:
             return v
-        return _validate_coordinate(v, max_len=12, min_val=-180.0, max_val=180.0)
+        return _validate_coordinate(v, max_len=20, min_val=-180.0, max_val=180.0)
 
 
 class CameraRead(BaseModel):

@@ -38,9 +38,6 @@ def _revalidation_due(last_revalidated_at: float) -> bool:
 async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id: uuid.UUID | None, queue: asyncio.Queue | None):
     last_revalidated_at = monotonic()
     while True:
-        if await request.is_disconnected():
-            break
-
         if _revalidation_due(last_revalidated_at):
             if not await session_validation_service.is_session_still_valid(user_id, village_id):
                 break
@@ -48,7 +45,6 @@ async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id
 
         if queue is None:
             await asyncio.sleep(_PING_INTERVAL_SECONDS)
-            yield {"event": "ping", "data": ""}
             continue
 
         try:
@@ -57,7 +53,7 @@ async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id
                 break
             yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
         except asyncio.TimeoutError:
-            yield {"event": "ping", "data": ""}
+            pass
 
 
 @router.post("/ticket", response_model=SSETicketResponse, status_code=status.HTTP_201_CREATED)

@@ -1,11 +1,14 @@
 from __future__ import annotations
 import uuid
+import re
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from app.models.contact import ContactType
 from app.models.user import UserRole
 from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import ContactErrors
+
+_THAI_ENG_PATTERN = re.compile(r"^[\u0020-\u007E\u0E00-\u0E7F]+$")
 
 def _normalize_content_type(value):
     if isinstance(value, str):
@@ -39,6 +42,8 @@ class ContactCreate(BaseModel):
         if self.content_type == ContactType.OTHER:
             if not self.custom_label:
                 raise ValueError(ContactErrors.CUSTOM_LABEL_REQUIRED)
+            if not _THAI_ENG_PATTERN.fullmatch(self.custom_label) or not _THAI_ENG_PATTERN.fullmatch(self.value):
+                raise ValueError(ContactErrors.INVALID_OTHER_FORMAT)
         elif self.custom_label is not None:
             raise ValueError(ContactErrors.CUSTOM_LABEL_NOT_ALLOWED)
         return self

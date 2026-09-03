@@ -117,6 +117,7 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
             await login_security_service.publish_bruteforce_alert(
                 username, user, locked_for_seconds, get_client_ip(request)
             )
+            raise AccountLocked(retry_after_seconds=locked_for_seconds)
 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
 

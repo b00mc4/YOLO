@@ -12,7 +12,6 @@ from app.db.session import get_db
 from app.models.camera import CameraDirection
 from app.models.user import User
 from app.schemas.car import (
-    CameraLiveRead,
     CarDetailRead,
     CarRead,
     DetectionCreate,
@@ -161,16 +160,6 @@ async def list_detections(
         page=page,
         page_size=page_size,
     )
-
-@router.get("/live", response_model=CameraLiveRead)
-async def get_camera_live(
-    request: Request,
-    camera_id: uuid.UUID = Query(...),
-    limit: int = Query(default=5, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await detection_service.get_camera_live_view(db, request, current_user, camera_id, limit)
 
 @router.get("/dashboard/today", response_model=DetectionDashboardRead)
 async def get_today_dashboard(

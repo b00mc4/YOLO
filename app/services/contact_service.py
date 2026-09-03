@@ -1,5 +1,6 @@
 from __future__ import annotations
 import uuid
+import re
 from fastapi import HTTPException, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import Common, ContactErrors, UserErrors
 
 _MAX_CONTACTS_PER_USER = 5
+_THAI_ENG_PATTERN = re.compile(r"^[\u0020-\u007E\u0E00-\u0E7F]+$")
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))
@@ -112,12 +114,17 @@ def _verify_contact_write_scope(
     )
 
 
-def _validate_content_type_consistency(content_type: ContactType, custom_label: str | None) -> None:
+def _validate_content_type_consistency(content_type: ContactType, custom_label: str | None, value: str | None = None) -> None:
     if content_type == ContactType.OTHER:
         if not custom_label:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=ContactErrors.CUSTOM_LABEL_REQUIRED,
+            )
+        if not _THAI_ENG_PATTERN.fullmatch(custom_label) or (value is not None and not _THAI_ENG_PATTERN.fullmatch(value)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=ContactErrors.INVALID_OTHER_FORMAT,
             )
     elif custom_label is not None:
         raise HTTPException(
@@ -316,7 +323,7 @@ async def update_contact(
     for field, value in update_data.items():
         setattr(contact, field, value)
 
-    _validate_content_type_consistency(contact.content_type, contact.custom_label)
+    _validate_content_type_consistency(contact.content_type, contact.custom_label, contact.value)
 
     await audit_service.log_action(
         db,
