@@ -31,9 +31,6 @@ from app.core.error_messages import CameraErrors, Common, VillageErrors
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-_RESYNC_CONCURRENCY_LIMIT = 10
-_MANUAL_VERIFY_RATE_LIMIT = 1
-_MANUAL_VERIFY_RATE_WINDOW_SECONDS = 30.0
 
 
 async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
@@ -500,7 +497,7 @@ async def _resync_cameras(db: AsyncSession, scope_filters: list) -> CameraResync
     )
     cameras = list(result.scalars().all())
 
-    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    semaphore = asyncio.Semaphore(settings.camera_resync_concurrency_limit)
     outcomes = await asyncio.gather(
         *(_upsert_path_guarded(semaphore, camera) for camera in cameras)
     )
@@ -609,8 +606,8 @@ async def check_camera_verification_now(
 
     get_rate_limiter().check(
         f"manual_verify_check:{camera_id}",
-        _MANUAL_VERIFY_RATE_LIMIT,
-        _MANUAL_VERIFY_RATE_WINDOW_SECONDS,
+        settings.camera_manual_verify_rate_limit,
+        settings.camera_manual_verify_rate_window_seconds,
     )
 
     result = await ai_vision_service.check_camera_verification(camera.id)
@@ -734,7 +731,7 @@ async def push_cameras_offline(village_id: uuid.UUID, camera_ids: list[uuid.UUID
         result = await db.execute(select(Camera).where(Camera.id.in_(camera_ids)))
         cameras = list(result.scalars().all())
 
-    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    semaphore = asyncio.Semaphore(settings.camera_resync_concurrency_limit)
     outcomes = await asyncio.gather(
         *(_deactivate_camera_guarded(semaphore, camera) for camera in cameras)
     )
@@ -791,7 +788,7 @@ async def push_cameras_online(village_id: uuid.UUID, camera_ids: list[uuid.UUID]
         result = await db.execute(select(Camera).where(Camera.id.in_(camera_ids)))
         cameras = list(result.scalars().all())
 
-    semaphore = asyncio.Semaphore(_RESYNC_CONCURRENCY_LIMIT)
+    semaphore = asyncio.Semaphore(settings.camera_resync_concurrency_limit)
     outcomes = await asyncio.gather(
         *(_activate_camera_guarded(semaphore, camera) for camera in cameras)
     )

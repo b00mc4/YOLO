@@ -18,9 +18,10 @@ from app.services import audit_service, village_service, email_service
 from app.core.error_messages import BlacklistErrors, Common, Auth
 
 
-logger = logging.getLogger(__name__)
+from app.core.config import get_settings
 
-_EMAIL_ALERT_COOLDOWN_SECONDS = 15 * 60
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 from app.core.scope_utils import resolve_village_id, build_scope_filters
@@ -217,7 +218,7 @@ async def handle_blacklist_detection(
         return
 
     if not get_alert_cooldown().allow(
-        _cooldown_key(camera_id, license_plate, province), _EMAIL_ALERT_COOLDOWN_SECONDS
+        _cooldown_key(camera_id, license_plate, province), settings.blacklist_email_alert_cooldown_seconds
     ):
         return
 

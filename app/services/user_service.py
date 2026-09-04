@@ -9,8 +9,6 @@ from app.api.deps import verify_village_scope
 from app.core.account_lockout import get_account_locker
 from app.core.security import hash_password, hash_token, verify_password
 from app.models.audit_log import AuditLog
-from app.models.blacklist import Blacklist
-from app.models.whitelist import Whitelist
 from app.models.contact import Contact
 from app.models.refresh_token import RefreshToken
 from app.models.user import User, UserRole
@@ -37,7 +35,9 @@ from app.core.rate_limit import get_rate_limiter, password_reauth_key, PASSWORD_
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
 _EMAIL_CHANGE_COOLDOWN = timedelta(minutes=1)
-_AVATAR_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
+from app.core.config import get_settings
+settings = get_settings()
+
 _AVATAR_UPLOAD_LIMIT = 10
 _AVATAR_UPLOAD_WINDOW_SECONDS = 30 * 60
 
@@ -688,7 +688,7 @@ async def upload_user_avatar(
     )
 
     content, extension = await storage_service.read_and_validate_image(
-        file, max_size_bytes=_AVATAR_MAX_IMAGE_SIZE_BYTES
+        file, max_size_bytes=settings.user_avatar_max_size_bytes
     )
 
     image_id = uuid.uuid4()

@@ -15,7 +15,6 @@ from app.core.security import (
     verify_password,
 )
 from app.models.refresh_token import RefreshToken
-from app.models.user import User
 from app.models.verify import Verify, VerifyType
 from app.services import audit_service, email_service, login_security_service
 from app.models.group import Group

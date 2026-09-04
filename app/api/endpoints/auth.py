@@ -29,7 +29,7 @@ _VERIFY_SET_PASSWORD_TOKEN_IP_WINDOW_SECONDS = 10 * 60
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
-_REFRESH_COOKIE_PATH = "/api/auth"
+
 
 _LOGIN_IP_LIMIT = 10
 _LOGIN_IP_WINDOW_SECONDS = 60
@@ -59,7 +59,7 @@ def _set_refresh_cookie(response: Response, raw_refresh_token: str, remember_me:
         secure=settings.cookie_secure,
         samesite=settings.cookie_samesite,
         domain=settings.cookie_domain,
-        path=_REFRESH_COOKIE_PATH,
+        path=settings.auth_refresh_cookie_path,
         **cookie_kwargs,
     )
 
@@ -67,7 +67,7 @@ def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(
         key=auth_service.REFRESH_TOKEN_COOKIE_NAME,
         domain=settings.cookie_domain,
-        path=_REFRESH_COOKIE_PATH,
+        path=settings.auth_refresh_cookie_path,
     )
 
 

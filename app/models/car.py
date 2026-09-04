@@ -15,6 +15,7 @@ class Car(Base):
     __table_args__ = (
         Index("ix_CarTABLE_village_time", "village_id", "time_detect"),
         Index("ix_CarTABLE_license_plate_trgm", "license_plate", postgresql_using="gin", postgresql_ops={"license_plate": "gin_trgm_ops"}),
+        Index("ix_CarTABLE_license_plate_province", "license_plate", "province"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

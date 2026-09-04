@@ -171,10 +171,10 @@ async def create_contact(
     count_result = await db.execute(
         select(func.count()).select_from(Contact).where(Contact.user_id == target_user.id)
     )
-    if count_result.scalar_one() >= _MAX_CONTACTS_PER_USER:
+    if count_result.scalar_one() >= settings.contact_max_per_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ContactErrors.max_contacts_reached(_MAX_CONTACTS_PER_USER),
+            detail=ContactErrors.max_contacts_reached(settings.contact_max_per_user),
         )
 
     contact = Contact(

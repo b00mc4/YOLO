@@ -25,8 +25,7 @@ from app.core.error_messages import Common, RealtimeErrors
 
 settings = get_settings()
 
-_MAX_CONNECTIONS_PER_USER = 5
-_TICKET_SWEEP_INTERVAL_SECONDS = 60.0
+
 _MAX_TRACKED_TICKETS = 10_000
 _BROADCAST_QUEUE_MAXSIZE = 20
 
@@ -78,7 +77,7 @@ def _sweep_expired_tickets() -> None:
     global _last_ticket_sweep_at
 
     now_monotonic = monotonic()
-    if now_monotonic - _last_ticket_sweep_at < _TICKET_SWEEP_INTERVAL_SECONDS:
+    if now_monotonic - _last_ticket_sweep_at < settings.presence_sweep_interval_seconds:
         return
     _last_ticket_sweep_at = now_monotonic
 
@@ -334,7 +333,7 @@ def unregister_watcher(ticket_data: _PresenceTicketData, queue: asyncio.Queue | 
 
 
 async def register_connection(ticket_data: _PresenceTicketData) -> uuid.UUID:
-    _connection_limiter.register(ticket_data.user_id, _MAX_CONNECTIONS_PER_USER)
+    _connection_limiter.register(ticket_data.user_id, settings.presence_max_connections_per_user)
 
     conn_id = uuid.uuid4()
 

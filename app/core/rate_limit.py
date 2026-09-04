@@ -1,7 +1,6 @@
 from __future__ import annotations
-from collections import deque
-from time import monotonic
 from collections import OrderedDict, deque
+from time import monotonic
 
 PASSWORD_REAUTH_LIMIT = 5
 PASSWORD_REAUTH_WINDOW_SECONDS = 15 * 60

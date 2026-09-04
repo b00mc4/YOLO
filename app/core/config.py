@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     mediamtx_jwt_private_key_b64: str
     mediamtx_stream_token_expire_seconds: int = Field(default=18000, ge=60, le=86400)
 
+    # Feature Limits & Constants
+    camera_resync_concurrency_limit: int = 10
+    camera_manual_verify_rate_limit: int = 1
+    camera_manual_verify_rate_window_seconds: float = 30.0
+    camera_verify_poll_interval_seconds: float = 2.0
+    camera_verify_max_duration_seconds: float = 60.0
+    blacklist_email_alert_cooldown_seconds: int = 900
+    contact_max_per_user: int = 50
+    presence_max_connections_per_user: int = 5
+    presence_sweep_interval_seconds: int = 60
+    channel_max_connections_per_user: int = 5
+    channel_queue_size: int = 100
+    user_avatar_max_size_bytes: int = 2_097_152  # 2MB
+    auth_refresh_cookie_path: str = "/api/auth/refresh"
+
     @model_validator(mode="after")
     def check_cookie_security(self) -> "Settings":
         if self.cookie_samesite == "none" and not self.cookie_secure:
