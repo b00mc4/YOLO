@@ -421,7 +421,7 @@ async def list_detections(
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
-    scope_filters = _build_detection_list_scope_filters(current_user, village_id)
+    scope_filters = build_scope_filters(current_user, village_id, Car)
     stmt = select(Car).where(*scope_filters)
 
     if village_name is not None:
@@ -515,33 +515,7 @@ def _today_bangkok_bounds() -> tuple[datetime, datetime, datetime]:
     )
 
 
-def _build_dashboard_scope_filters(current_user: User, village_id_filter: uuid.UUID | None) -> list:
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id_filter is not None:
-            return [Car.village_id == village_id_filter]
-        return []
-
-    if village_id_filter is not None and village_id_filter != current_user.village_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
-        )
-    return [Car.village_id == current_user.village_id]
-
-def _build_detection_list_scope_filters(
-    current_user: User, village_id_filter: uuid.UUID | None
-) -> list:
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id_filter is not None:
-            return [Car.village_id == village_id_filter]
-        return []
-
-    if village_id_filter is not None and village_id_filter != current_user.village_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
-        )
-    return [Car.village_id == current_user.village_id]
+from app.core.scope_utils import build_scope_filters
 
 
 async def get_today_dashboard(
@@ -552,7 +526,7 @@ async def get_today_dashboard(
     latest_limit: int,
 ) -> DetectionDashboardRead:
     start_of_day_bangkok, start_utc, end_utc = _today_bangkok_bounds()
-    scope_filters = _build_dashboard_scope_filters(current_user, village_id)
+    scope_filters = build_scope_filters(current_user, village_id, Car)
     base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
 
     # --- single aggregated counts query (replaces 6 separate queries) ---

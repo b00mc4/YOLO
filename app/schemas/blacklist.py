@@ -7,24 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 _THAI_PLATE_PATTERN = re.compile(r"^[ก-ฮะ-์เ-ไ0-9\s]+$")
 
 
+from app.core.plate_format import PlateString, ProvinceString
+
 class BlacklistCreate(BaseModel):
     village_id: uuid.UUID | None = None
-    license_plate: str = Field(max_length=255)
-    province: str = Field(max_length=255)
+    license_plate: PlateString = Field(max_length=255)
+    province: ProvinceString = Field(max_length=255)
     reason: str = Field(max_length=255)
-
-
-    @field_validator("license_plate", "province")
-    @classmethod
-    def normalize(cls, v: str) -> str:
-        return v.strip().upper()
-
-    @field_validator("license_plate")
-    @classmethod
-    def validate_thai_plate(cls, v: str) -> str:
-        if not _THAI_PLATE_PATTERN.match(v):
-            raise ValueError("ป้ายทะเบียนต้องเป็นอักขระภาษาไทย อังกฤษ หรือตัวเลขเท่านั้น")
-        return v
 
     @field_validator("reason")
     @classmethod
@@ -38,21 +27,9 @@ class BlacklistCreate(BaseModel):
 
 
 class BlacklistUpdate(BaseModel):
-    license_plate: str | None = Field(default=None, max_length=255)
-    province: str | None = Field(default=None, max_length=255)
+    license_plate: PlateString | None = Field(default=None, max_length=255)
+    province: ProvinceString | None = Field(default=None, max_length=255)
     reason: str | None = Field(default=None, max_length=255)
-
-    @field_validator("license_plate", "province")
-    @classmethod
-    def normalize(cls, v: str | None) -> str | None:
-        return v.strip().upper() if v is not None else v
-
-    @field_validator("license_plate")
-    @classmethod
-    def validate_thai_plate(cls, v: str | None) -> str | None:
-        if v is not None and not _THAI_PLATE_PATTERN.match(v):
-            raise ValueError("ป้ายทะเบียนต้องเป็นภาษาไทยและตัวเลข 0-9 เท่านั้น")
-        return v
 
     @field_validator("reason")
     @classmethod

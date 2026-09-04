@@ -9,18 +9,15 @@ from app.models.camera import CameraDirection
 _CAPTURE_TIME_FORMAT = "%Y/%m/%d %H:%M:%S"
 
 
+from app.core.plate_format import NormalizedString
+
 class DetectionCreate(BaseModel):
     event_id: uuid.UUID
     camera_id: uuid.UUID
-    license_plate: str = Field(max_length=255)
-    province: str = Field(max_length=255)
+    license_plate: NormalizedString = Field(max_length=255)
+    province: NormalizedString = Field(max_length=255)
     color: str = Field(max_length=255)
     capture_time: datetime
-
-    @field_validator("license_plate", "province")
-    @classmethod
-    def normalize(cls, v: str) -> str:
-        return v.strip().upper()
 
     @field_validator("capture_time", mode="before")
     @classmethod

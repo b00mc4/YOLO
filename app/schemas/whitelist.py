@@ -7,13 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 _THAI_PLATE_PATTERN = re.compile(r"^[ก-ฮะ-์เ-ไ0-9\s]+$")
 
 
+from app.core.plate_format import PlateString, ProvinceString
+
 class WhitelistCreate(BaseModel):
     village_id: uuid.UUID | None = None
     name: str = Field(max_length=255)
     house_no: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=20)
-    license_plate: str = Field(max_length=255)
-    province: str = Field(max_length=255)
+    license_plate: PlateString = Field(max_length=255)
+    province: ProvinceString = Field(max_length=255)
     color: str | None = Field(default=None, max_length=255)
     note: str | None = Field(default=None, max_length=255)
 
@@ -23,18 +25,6 @@ class WhitelistCreate(BaseModel):
         v = v.strip()
         if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s\.]+$", v):
             raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ จุด และช่องว่างเท่านั้น (ห้ามใส่อิโมจิหรืออักขระพิเศษอื่น)")
-        return v
-
-    @field_validator("license_plate", "province")
-    @classmethod
-    def normalize(cls, v: str) -> str:
-        return v.strip().upper()
-
-    @field_validator("license_plate")
-    @classmethod
-    def validate_thai_plate(cls, v: str) -> str:
-        if not _THAI_PLATE_PATTERN.match(v):
-            raise ValueError("ป้ายทะเบียนต้องเป็นภาษาไทยและตัวเลข 0-9 เท่านั้น")
         return v
 
     @field_validator("house_no", "phone", "color", "note")
@@ -47,30 +37,19 @@ class WhitelistUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     house_no: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=20)
-    license_plate: str | None = Field(default=None, max_length=255)
-    province: str | None = Field(default=None, max_length=255)
+    license_plate: PlateString | None = Field(default=None, max_length=255)
+    province: ProvinceString | None = Field(default=None, max_length=255)
     color: str | None = Field(default=None, max_length=255)
     note: str | None = Field(default=None, max_length=255)
 
     @field_validator("name")
     @classmethod
-    def validate_name_update(cls, v: str | None) -> str | None:
+    def validate_name(cls, v: str | None) -> str | None:
         if v is not None:
             v = v.strip()
             if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s\.]+$", v):
                 raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ จุด และช่องว่างเท่านั้น (ห้ามใส่อิโมจิหรืออักขระพิเศษอื่น)")
-        return v
-
-    @field_validator("license_plate", "province")
-    @classmethod
-    def normalize(cls, v: str | None) -> str | None:
-        return v.strip().upper() if v is not None else v
-
-    @field_validator("license_plate")
-    @classmethod
-    def validate_thai_plate(cls, v: str | None) -> str | None:
-        if v is not None and not _THAI_PLATE_PATTERN.match(v):
-            raise ValueError("ป้ายทะเบียนต้องเป็นภาษาไทยและตัวเลข 0-9 เท่านั้น")
+            return v
         return v
 
     @field_validator("house_no", "phone", "color", "note")

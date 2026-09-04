@@ -9,7 +9,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker
-from app.services import ai_vision_service, auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service
+from app.services import ai_vision_service, auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service, detection_service
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 _AUTH_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
@@ -22,63 +22,24 @@ _STARTUP_RESYNC_MAX_ATTEMPTS = 3
 _STARTUP_RESYNC_BACKOFF_BASE_SECONDS = 2.0
 
 
-async def _notification_cleanup_loop() -> None:
+async def _run_cleanup_loop(name: str, interval: int, task_fn) -> None:
     consecutive_errors = 0
     while True:
         if consecutive_errors > 0:
             backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
             await asyncio.sleep(backoff)
         else:
-            await asyncio.sleep(_NOTIFICATION_CLEANUP_INTERVAL_SECONDS)
+            await asyncio.sleep(interval)
             
         try:
             async with async_session_maker() as db:
-                deleted = await notification_service.cleanup_old_notifications(db)
+                deleted = await task_fn(db)
             if deleted:
-                logger.info("Notification cleanup: removed %s expired notification(s)", deleted)
+                logger.info("%s cleanup: removed %s item(s)", name, deleted)
             consecutive_errors = 0
         except Exception:
             consecutive_errors += 1
-            logger.exception("Notification cleanup loop iteration failed (error count: %s)", consecutive_errors)
-
-async def _auth_cleanup_loop() -> None:
-    consecutive_errors = 0
-    while True:
-        if consecutive_errors > 0:
-            backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
-            await asyncio.sleep(backoff)
-        else:
-            await asyncio.sleep(_AUTH_CLEANUP_INTERVAL_SECONDS)
-            
-        try:
-            async with async_session_maker() as db:
-                deleted = await auth_service.cleanup_expired_refresh_tokens(db)
-            if deleted:
-                logger.info("Auth cleanup: removed %s expired refresh token(s)", deleted)
-            consecutive_errors = 0
-        except Exception:
-            consecutive_errors += 1
-            logger.exception("Auth cleanup loop iteration failed (error count: %s)", consecutive_errors)
-
-async def _image_cleanup_loop() -> None:
-    consecutive_errors = 0
-    while True:
-        if consecutive_errors > 0:
-            backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
-            await asyncio.sleep(backoff)
-        else:
-            await asyncio.sleep(86400) # ทำความสะอาดรูปขยะวันละ 1 ครั้ง
-            
-        try:
-            async with async_session_maker() as db:
-                from app.services import detection_service
-                deleted = await detection_service.cleanup_orphaned_images(db)
-            if deleted:
-                logger.info("Image cleanup: removed %s orphaned image(s)", deleted)
-            consecutive_errors = 0
-        except Exception:
-            consecutive_errors += 1
-            logger.exception("Image cleanup loop iteration failed (error count: %s)", consecutive_errors)
+            logger.exception("%s cleanup loop iteration failed (error count: %s)", name, consecutive_errors)
 
 async def _startup_camera_resync_background() -> None:
     for attempt in range(1, _STARTUP_RESYNC_MAX_ATTEMPTS + 1):
@@ -124,13 +85,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     verification_resume_task = asyncio.create_task(_resume_camera_verification_background())
     app.state.startup_verification_resume_task = verification_resume_task
 
-    clean_notification_task = asyncio.create_task(_notification_cleanup_loop())
+    clean_notification_task = asyncio.create_task(
+        _run_cleanup_loop("Notification", _NOTIFICATION_CLEANUP_INTERVAL_SECONDS, notification_service.cleanup_old_notifications)
+    )
     app.state.startup_clean_notification_task = clean_notification_task
 
-    clean_auth_task = asyncio.create_task(_auth_cleanup_loop())
+    clean_auth_task = asyncio.create_task(
+        _run_cleanup_loop("Auth", _AUTH_CLEANUP_INTERVAL_SECONDS, auth_service.cleanup_expired_refresh_tokens)
+    )
     app.state.startup_clean_auth_task = clean_auth_task
 
-    clean_image_task = asyncio.create_task(_image_cleanup_loop())
+    clean_image_task = asyncio.create_task(
+        _run_cleanup_loop("Image", 86400, detection_service.cleanup_orphaned_images)
+    )
     app.state.startup_clean_image_task = clean_image_task
 
     yield

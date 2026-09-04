@@ -13,26 +13,7 @@ from app.services import audit_service, village_service
 from app.core.error_messages import Common, WhitelistErrors, Auth
 
 
-async def _resolve_village_id(
-    db: AsyncSession,
-    current_user: User,
-    requested_village_id: uuid.UUID | None,
-) -> uuid.UUID:
-    if current_user.role == UserRole.SUPERADMIN:
-        if requested_village_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=Common.VILLAGE_ID_REQUIRED_SUPERADMIN,
-            )
-        village = await village_service.get_village(db, requested_village_id)
-        if not village.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=Auth.VILLAGE_INACTIVE,
-            )
-        return requested_village_id
-    return current_user.village_id
-
+from app.core.scope_utils import resolve_village_id, build_scope_filters
 
 async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Whitelist:
     result = await db.execute(select(Whitelist).where(Whitelist.id == entry_id))
@@ -40,22 +21,6 @@ async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Whitelist:
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=WhitelistErrors.NOT_FOUND)
     return entry
-
-
-def _build_whitelist_list_scope_filters(
-    current_user: User, village_id_filter: uuid.UUID | None
-) -> list:
-    if current_user.role == UserRole.SUPERADMIN:
-        if village_id_filter is not None:
-            return [Whitelist.village_id == village_id_filter]
-        return []
-
-    if village_id_filter is not None and village_id_filter != current_user.village_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
-        )
-    return [Whitelist.village_id == current_user.village_id]
 
 
 async def _check_not_blacklisted(
@@ -90,7 +55,7 @@ async def create_whitelist_entry(
     current_user: User,
     payload: WhitelistCreate,
 ) -> WhitelistRead:
-    village_id = await _resolve_village_id(db, current_user, payload.village_id)
+    village_id = await resolve_village_id(db, current_user, payload.village_id)
     await _check_not_blacklisted(db, village_id, payload.license_plate, payload.province)
 
     entry = Whitelist(
@@ -131,7 +96,7 @@ async def list_whitelist_entries(
     page: int,
     page_size: int,
 ) -> PaginatedResponse[WhitelistRead]:
-    scope_filters = _build_whitelist_list_scope_filters(current_user, village_id)
+    scope_filters = build_scope_filters(current_user, village_id, Whitelist)
     stmt = select(Whitelist).where(*scope_filters)
 
     if name is not None:
@@ -143,7 +108,8 @@ async def list_whitelist_entries(
     if province is not None:
         stmt = stmt.where(Whitelist.province == province)
 
-    count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    count_stmt = stmt.with_only_columns(func.count()).order_by(None)
+    count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
     stmt = (

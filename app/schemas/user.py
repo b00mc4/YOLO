@@ -6,7 +6,17 @@ from app.core.security import validate_password_policy
 from app.core.error_messages import ValidationErrors
 from app.models.user import UserRole
 from app.schemas.contact import ContactRead
+import re
 
+def _validate_fullname(v: str) -> str:
+    v = v.strip()
+    if len(v) < 4:
+        raise ValueError("ชื่อ-นามสกุลต้องมีความยาวอย่างน้อย 4 ตัวอักษร")
+    if len(v) > 100:
+        raise ValueError("ชื่อ-นามสกุลต้องมีความยาวไม่เกิน 100 ตัวอักษร")
+    if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s]+$", v):
+        raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ และช่องว่างเท่านั้น (ห้ามใช้อิโมจิหรืออักขระพิเศษ)")
+    return v
 class UserCreate(BaseModel):
     username: str = Field(max_length=36)
     fullname: str = Field(max_length=100)
@@ -31,17 +41,7 @@ class UserCreate(BaseModel):
     @field_validator("fullname")
     @classmethod
     def validate_fullname(cls, v: str) -> str:
-        v = v.strip()
-        if len(v) < 4:
-            raise ValueError("ชื่อ-นามสกุลต้องมีความยาวอย่างน้อย 4 ตัวอักษร")
-        if len(v) > 100:
-            raise ValueError("ชื่อ-นามสกุลต้องมีความยาวไม่เกิน 100 ตัวอักษร")
-        
-        import re
-        if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s]+$", v):
-            raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ และช่องว่างเท่านั้น (ห้ามใช้อิโมจิหรืออักขระพิเศษ)")
-            
-        return v
+        return _validate_fullname(v)
 
     @field_validator("email")
     @classmethod
@@ -161,11 +161,7 @@ class UserFullnameUpdate(BaseModel):
     @field_validator("fullname")
     @classmethod
     def validate_fullname_update(cls, v: str) -> str:
-        v = v.strip()
-        import re
-        if not re.fullmatch(r"^[A-Za-z\u0E00-\u0E7F\s]+$", v):
-            raise ValueError("ชื่อ-นามสกุลต้องประกอบด้วยภาษาไทย ภาษาอังกฤษ และช่องว่างเท่านั้น (ห้ามใช้อิโมจิหรืออักขระพิเศษ)")
-        return v
+        return _validate_fullname(v)
 
 
 class UserProfileRead(BaseModel):

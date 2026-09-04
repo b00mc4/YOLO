@@ -14,21 +14,10 @@ class TokenResponse(BaseModel):
 class LoginResponse(TokenResponse):
     user: UserRead
 
-class SetPasswordRequest(BaseModel):
+from app.schemas.common import PasswordConfirmMixin
+
+class SetPasswordRequest(PasswordConfirmMixin):
     token: str = Field(max_length=512)
-    new_password: str = Field(max_length=36)
-    confirm_new_password: str = Field(max_length=36)
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, v: str) -> str:
-        return validate_password_policy(v)
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> SetPasswordRequest:
-        if self.new_password != self.confirm_new_password:
-            raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
-        return self
 
 class SetPasswordResponse(BaseModel):
     detail: str
@@ -42,21 +31,8 @@ class ForgotPasswordRequest(BaseModel):
     def normalize_email(cls, v: str) -> str:
         return v.strip().lower()
 
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(PasswordConfirmMixin):
     current_password: str = Field(max_length=128)
-    new_password: str = Field(max_length=36)
-    confirm_new_password: str = Field(max_length=36)
-
-    @field_validator("new_password")
-    @classmethod
-    def validate_new_password(cls, v: str) -> str:
-        return validate_password_policy(v)
-
-    @model_validator(mode="after")
-    def check_passwords_match(self) -> ChangePasswordRequest:
-        if self.new_password != self.confirm_new_password:
-            raise ValueError(ValidationErrors.PASSWORD_MISMATCH)
-        return self
 
 class EmailChangeConfirm(BaseModel):
     token: str = Field(max_length=512)
