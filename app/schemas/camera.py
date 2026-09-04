@@ -5,7 +5,7 @@ from typing import Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.camera import CameraDirection, CameraVerificationStatus
-from app.core.url_utils import normalize_rtsp_url
+from app.core.url_utils import normalize_rtsp_url, redact_rtsp_url
 
 _NO_EMOJI_REGEX = re.compile(r"^[\u0E00-\u0E7F\x20-\x7E]+$")
 
@@ -115,6 +115,11 @@ class CameraRead(BaseModel):
     ai_vision_synced_at: datetime | None
     created_at: datetime
     is_active: bool
+
+    @field_validator("stream_ai")
+    @classmethod
+    def redact_stream_ai(cls, v: str) -> str:
+        return redact_rtsp_url(v)
 
 
 class CameraBasicRead(BaseModel):

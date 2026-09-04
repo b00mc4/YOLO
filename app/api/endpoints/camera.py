@@ -51,14 +51,16 @@ async def list_cameras(
         db, current_user, village_id, is_active, direction, page, page_size
     )
 
-@router.post("/resync-all", response_model=CameraResyncAllRead)
+@router.post("/resync-all", response_model=MessageResponse)
 async def resync_all_cameras(
     request: Request,
+    background_tasks: BackgroundTasks,
     village_id: uuid.UUID | None = Query(default=None),
     current_user: User = Depends(require_roles(*_WRITE_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await camera_service.resync_all_cameras(db, request, current_user, village_id)
+    await camera_service.resync_all_cameras(db, request, background_tasks, current_user, village_id)
+    return MessageResponse(detail="กำลังดำเนินการ Resync กล้องเบื้องหลัง")
 
 
 @router.get("/{camera_id}", response_model=CameraRead)

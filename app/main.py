@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
-    
+
     await mediamtx_service.close()
     await ai_vision_service.close()
 

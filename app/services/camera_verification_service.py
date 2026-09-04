@@ -51,6 +51,13 @@ async def _run_verification_loop(camera_id: uuid.UUID) -> None:
         while True:
             await asyncio.sleep(settings.camera_verify_poll_interval_seconds)
 
+            async with async_session_maker() as db:
+                result = await db.execute(select(Camera).where(Camera.id == camera_id))
+                cam = result.scalar_one_or_none()
+                if cam is None or not cam.is_active or cam.verification_status != CameraVerificationStatus.PENDING:
+                    logger.info("Verification loop for camera %s aborted: no longer active/pending in DB", camera_id)
+                    return
+
             try:
                 result = await ai_vision_service.check_camera_verification(camera_id)
 

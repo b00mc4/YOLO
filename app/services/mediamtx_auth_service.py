@@ -23,22 +23,19 @@ def _load_private_key() -> EllipticCurvePrivateKey:
     return key
 
 
-_private_key = _load_private_key()
-_public_key = _private_key.public_key()
-_jwks_cache = {"keys": [ECAlgorithm.to_jwk(_public_key, as_dict=True)]}
-
-
 def issue_stream_token(camera_id: uuid.UUID) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "iat": now,
+        "nbf": now,
         "exp": now + timedelta(seconds=settings.mediamtx_stream_token_expire_seconds),
         _MEDIAMTX_PERMISSIONS_CLAIM: [
             {"action": _READ_ACTION, "path": str(camera_id)},
         ],
     }
-    return jwt.encode(payload, _private_key, algorithm=_JWT_ALGORITHM)
+    return jwt.encode(payload, _load_private_key(), algorithm=_JWT_ALGORITHM)
 
 
 def get_jwks() -> dict:
-    return _jwks_cache
+    public_key = _load_private_key().public_key()
+    return {"keys": [ECAlgorithm.to_jwk(public_key, as_dict=True)]}

@@ -44,3 +44,9 @@ test_detection_assets/
 test_camera_verification.py
 test_detection.py
 test_onvif.py
+
+all_reports.md
+report_dump.md
+subagent_messages_full.md
+subagent_messages.md
+test_audit.py

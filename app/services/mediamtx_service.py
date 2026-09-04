@@ -124,8 +124,8 @@ async def _trigger_on_demand_pull(camera_id: uuid.UUID) -> None:
 
     try:
         await _client.get(playlist_url, timeout=_TRIGGER_PULL_TIMEOUT_SECONDS)
-    except httpx.HTTPError:
-        pass
+    except httpx.HTTPError as exc:
+        logger.warning("MediaMTX trigger pull failed for camera %s: %s", camera_id, exc)
 
 
 async def _wait_for_ready_after_trigger(camera_id: uuid.UUID) -> bool:

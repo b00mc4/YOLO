@@ -28,7 +28,28 @@ def normalize_rtsp_url(raw: str) -> str:
         userinfo += "@"
 
     netloc = f"{userinfo}{hostname}"
-    if parts.port is not None:
+    if parts.port:
         netloc += f":{parts.port}"
 
     return urlunsplit((scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+def redact_rtsp_url(raw: str) -> str:
+    if not raw:
+        return raw
+    try:
+        parts = urlsplit(raw)
+        if not parts.hostname:
+            return raw
+        
+        userinfo = ""
+        if parts.username or parts.password:
+            userinfo = "***:***@"
+            
+        netloc = f"{userinfo}{parts.hostname}"
+        if parts.port:
+            netloc += f":{parts.port}"
+            
+        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    except Exception:
+        return raw

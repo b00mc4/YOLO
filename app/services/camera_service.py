@@ -24,7 +24,7 @@ from app.schemas.camera import (
     CameraVerificationCheckRead,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service
+from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service, channel_service
 from app.services.ai_vision_service import VerificationCheckResult
 from app.core.error_messages import CameraErrors, Common, VillageErrors
 
@@ -516,33 +516,70 @@ async def _resync_cameras(db: AsyncSession, scope_filters: list) -> CameraResync
     )
 
 
+async def _run_resync_all_cameras_background(
+    user_id: uuid.UUID,
+    village_id_filter: uuid.UUID | None,
+    is_superadmin: bool,
+    user_village_id: uuid.UUID | None,
+) -> None:
+    async with async_session_maker() as db:
+        if is_superadmin:
+            scope_filters = [Camera.village_id == village_id_filter] if village_id_filter else []
+        else:
+            scope_filters = [Camera.village_id == user_village_id]
+
+        resync_result = await _resync_cameras(db, scope_filters)
+
+        detail = (
+            f"resynced {resync_result.total} camera(s) with MediaMTX: "
+            f"{resync_result.succeeded} succeeded, {resync_result.failed} failed"
+        )
+        await audit_service.log_action(
+            db,
+            request=None,
+            action="camera_resync_all",
+            detail=detail,
+            user_id=user_id,
+            village_id=village_id_filter or user_village_id,
+        )
+        
+        payload = {
+            "total": resync_result.total,
+            "succeeded": resync_result.succeeded,
+            "failed": resync_result.failed,
+            "detail": detail
+        }
+        
+        target_village = village_id_filter or user_village_id
+        if target_village:
+            await notification_service.notify_village(db, target_village, "camera_resync_all_completed", detail)
+            await channel_service.alerts.publish(target_village, "camera_resync_all_completed", payload)
+        else:
+            await notification_service.notify_superadmins(db, "camera_resync_all_completed", detail)
+            await channel_service.alerts.publish_global("camera_resync_all_completed", payload)
+            
+        await db.commit()
+
+
 async def resync_all_cameras(
     db: AsyncSession,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User,
     village_id_filter: uuid.UUID | None,
-) -> CameraResyncAllRead:
-    scope_filters = _build_resync_scope_filters(current_user, village_id_filter)
+) -> None:
+    _build_resync_scope_filters(current_user, village_id_filter)
 
     if village_id_filter is not None:
         await _get_village_or_404(db, village_id_filter)
 
-    resync_result = await _resync_cameras(db, scope_filters)
-
-    await audit_service.log_action(
-        db,
-        request,
-        action="camera_resync_all",
-        detail=(
-            f"resynced {resync_result.total} camera(s) with MediaMTX: "
-            f"{resync_result.succeeded} succeeded, {resync_result.failed} failed"
-        ),
-        user_id=current_user.id,
-        village_id=village_id_filter,
+    background_tasks.add_task(
+        _run_resync_all_cameras_background,
+        current_user.id,
+        village_id_filter,
+        current_user.role == UserRole.SUPERADMIN,
+        current_user.village_id,
     )
-    await db.commit()
-
-    return resync_result
 
 
 async def resync_all_cameras_on_startup(db: AsyncSession) -> CameraResyncAllRead:
