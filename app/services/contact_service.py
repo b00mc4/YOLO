@@ -20,7 +20,8 @@ from app.services import audit_service
 from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import Common, ContactErrors, UserErrors
 
-_MAX_CONTACTS_PER_USER = 5
+from app.core.config import get_settings
+settings = get_settings()
 _THAI_ENG_PATTERN = re.compile(r"^[\u0020-\u007E\u0E00-\u0E7F]+$")
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
