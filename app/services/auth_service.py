@@ -60,13 +60,20 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
 
     get_rate_limiter().check(rate_limit_key, _LOGIN_USERNAME_LIMIT, _LOGIN_USERNAME_WINDOW_SECONDS)
 
-    result = await db.execute(select(User).where(User.username == normalized_username))
-    user = result.scalar_one_or_none()
-
-    village_is_active = True
-    if user is not None and user.role != UserRole.SUPERADMIN:
-        village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))
-        village_is_active = bool(village_result.scalar_one_or_none())
+    result = await db.execute(
+        select(User, Group.is_active.label("village_is_active"))
+        .outerjoin(Group, User.village_id == Group.id)
+        .where(User.username == normalized_username)
+    )
+    row = result.one_or_none()
+    
+    if row is not None:
+        user, village_is_active = row
+        if user.role == UserRole.SUPERADMIN:
+            village_is_active = True
+    else:
+        user = None
+        village_is_active = True
 
     hash_to_check = (
         user.hashpassword
@@ -163,7 +170,11 @@ async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
 
 async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     token_hash = hash_token(raw_refresh_token)
-    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    result = await db.execute(
+        select(RefreshToken)
+        .where(RefreshToken.token_hash == token_hash)
+        .with_for_update()
+    )
     stored_token = result.scalar_one_or_none()
 
     if stored_token is None or stored_token.expired_at < datetime.now(timezone.utc):

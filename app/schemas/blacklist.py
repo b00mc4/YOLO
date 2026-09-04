@@ -29,9 +29,12 @@ class BlacklistCreate(BaseModel):
     @field_validator("reason")
     @classmethod
     def validate_reason(cls, v: str) -> str:
-        if not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v):
+        v_stripped = v.strip()
+        if not v_stripped:
+            raise ValueError("เหตุผลต้องไม่เป็นค่าว่าง")
+        if not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v_stripped):
             raise ValueError("เหตุผลต้องเป็นภาษาไทย ภาษาอังกฤษ ตัวเลข และอักขระพิเศษเท่านั้น (ห้ามใส่อิโมจิ)")
-        return v
+        return v_stripped
 
 
 class BlacklistUpdate(BaseModel):
@@ -54,8 +57,13 @@ class BlacklistUpdate(BaseModel):
     @field_validator("reason")
     @classmethod
     def validate_reason(cls, v: str | None) -> str | None:
-        if v is not None and not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v):
-            raise ValueError("เหตุผลต้องเป็นภาษาไทย ภาษาอังกฤษ ตัวเลข และอักขระพิเศษเท่านั้น (ห้ามใส่อิโมจิ)")
+        if v is not None:
+            v_stripped = v.strip()
+            if not v_stripped:
+                raise ValueError("เหตุผลต้องไม่เป็นค่าว่าง")
+            if not re.fullmatch(r"^[\x20-\x7E\u0E00-\u0E7F\n\r]+$", v_stripped):
+                raise ValueError("เหตุผลต้องเป็นภาษาไทย ภาษาอังกฤษ ตัวเลข และอักขระพิเศษเท่านั้น (ห้ามใส่อิโมจิ)")
+            return v_stripped
         return v
 
 class BlacklistRead(BaseModel):

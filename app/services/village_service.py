@@ -228,6 +228,14 @@ async def delete_village(
     await db.execute(delete(Blacklist).where(Blacklist.village_id == village_id))
     await db.execute(delete(Whitelist).where(Whitelist.village_id == village_id))
     await db.execute(delete(Camera).where(Camera.village_id == village_id))
+    
+    # เคลียร์ Foreign Key ใน AuditLog ที่อาจค้างอยู่
+    from sqlalchemy import update
+    from app.models.audit_log import AuditLog
+    await db.execute(update(AuditLog).where(AuditLog.village_id == village_id).values(village_id=None))
+    if user_ids:
+        await db.execute(update(AuditLog).where(AuditLog.user_id.in_(user_ids)).values(user_id=None))
+        
     await db.execute(delete(User).where(User.village_id == village_id))
 
     await audit_service.log_action(
