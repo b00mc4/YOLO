@@ -86,7 +86,8 @@ async def login(
     user = await auth_service.authenticate_user(db, request, form_data.username, form_data.password, remember_me)
     access_token, raw_refresh_token = await auth_service.issue_tokens(db, user, remember_me)
     _set_refresh_cookie(response, raw_refresh_token, remember_me)
-    return LoginResponse(access_token=access_token, user=user)
+    expires_in_sec = settings.access_token_expire_minutes * 60
+    return LoginResponse(access_token=access_token, user=user, expires_in=expires_in_sec)
 
 
 @router.post(
@@ -106,7 +107,8 @@ async def refresh(
 
     access_token, new_raw_refresh_token, remember_me = await auth_service.rotate_refresh_token(db, raw_refresh_token)
     _set_refresh_cookie(response, new_raw_refresh_token, remember_me)
-    return TokenResponse(access_token=access_token)
+    expires_in_sec = settings.access_token_expire_minutes * 60
+    return TokenResponse(access_token=access_token, expires_in=expires_in_sec)
 
 
 @router.post(

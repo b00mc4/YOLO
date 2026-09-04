@@ -48,6 +48,7 @@ class _PresenceTicketData:
     view_scope: PresenceViewScope
     view_village_id: uuid.UUID | None
     expire_at: datetime
+    password_changed_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +130,7 @@ def issue_presence_ticket(
         view_scope=view_scope,
         view_village_id=view_village_id,
         expire_at=expire_at,
+        password_changed_at=current_user.password_changed_at,
     )
     return raw_token
 

@@ -221,7 +221,7 @@ async def delete_village(
         db,
         request,
         action="village_deleted",
-        detail=f"permanently deleted village (and all related data): {village_name}",
+        detail=f"permanently deleted village (detection history retained as anonymized stats): {village_name}",
         user_id=current_user.id,
         village_id=None,
     )

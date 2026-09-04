@@ -9,6 +9,7 @@ from app.core.error_messages import ValidationErrors
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    expires_in: int
 
 class LoginResponse(TokenResponse):
     user: UserRead

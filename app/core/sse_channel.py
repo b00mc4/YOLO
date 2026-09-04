@@ -69,13 +69,13 @@ class SSEChannel:
         now_utc = datetime.now(timezone.utc)
         expired_keys = [
             token_hash
-            for token_hash, (_, _, expire_at) in self._tickets.items()
+            for token_hash, (_, _, expire_at, _) in self._tickets.items()
             if expire_at < now_utc
         ]
         for token_hash in expired_keys:
             self._tickets.pop(token_hash, None)
 
-    def issue_ticket(self, user_id: uuid.UUID, scope_village_id: uuid.UUID | None) -> str:
+    def issue_ticket(self, user_id: uuid.UUID, scope_village_id: uuid.UUID | None, password_changed_at: datetime) -> str:
         self._sweep_expired_tickets()
 
         if len(self._tickets) >= self._MAX_TRACKED_TICKETS:
@@ -83,19 +83,19 @@ class SSEChannel:
 
         raw_token = generate_secure_token()
         expire_at = datetime.now(timezone.utc) + timedelta(seconds=self._ticket_expire_seconds)
-        self._tickets[hash_token(raw_token)] = (user_id, scope_village_id, expire_at)
+        self._tickets[hash_token(raw_token)] = (user_id, scope_village_id, expire_at, password_changed_at)
         return raw_token
 
-    def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None]:
+    def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None, datetime]:
         ticket = self._tickets.pop(hash_token(raw_token), None)
         if ticket is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=RealtimeErrors.INVALID_OR_EXPIRED_TICKET)
 
-        user_id, village_id, expire_at = ticket
+        user_id, village_id, expire_at, password_changed_at = ticket
         if expire_at < datetime.now(timezone.utc):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=RealtimeErrors.INVALID_OR_EXPIRED_TICKET)
 
-        return user_id, village_id
+        return user_id, village_id, password_changed_at
 
     def register_connection(self, user_id: uuid.UUID) -> None:
         self._limiter.register(user_id, self._max_connections_per_user)
@@ -161,9 +161,9 @@ class ChannelService:
         scope_village_id = (
             None if current_user.role == UserRole.SUPERADMIN else current_user.village_id
         )
-        return self._channel.issue_ticket(current_user.id, scope_village_id)
+        return self._channel.issue_ticket(current_user.id, scope_village_id, current_user.password_changed_at)
 
-    def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None]:
+    def resolve_ticket(self, raw_token: str) -> tuple[uuid.UUID, uuid.UUID | None, datetime]:
         return self._channel.resolve_ticket(raw_token)
 
     def register_connection(self, user_id: uuid.UUID) -> None:

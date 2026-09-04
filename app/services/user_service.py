@@ -217,7 +217,12 @@ async def create_user(
     else:
         village_id = payload.village_id
         if payload.role != UserRole.SUPERADMIN:
-            await village_service.get_village(db, village_id)
+            village = await village_service.get_village(db, village_id)
+            if not village.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=Auth.VILLAGE_INACTIVE,
+                )
 
     if payload.role == UserRole.USER:
         existing_admin_count_result = await db.execute(
@@ -495,8 +500,7 @@ async def delete_user(
 
     _verify_user_write_scope(current_user, target)
 
-    if target.avatar_path:
-        await storage_service.delete_image(target.avatar_path)
+    avatar_path_to_delete = target.avatar_path
 
     await audit_service.log_action(
         db,
@@ -512,6 +516,9 @@ async def delete_user(
     
     await db.delete(target)
     await db.commit()
+
+    if avatar_path_to_delete:
+        await storage_service.delete_image(avatar_path_to_delete)
 
 async def list_locked_accounts(
     db: AsyncSession,

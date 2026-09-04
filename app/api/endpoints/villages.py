@@ -60,7 +60,7 @@ async def delete_village(
     village_id: uuid.UUID,
     request: Request,
     background_tasks: BackgroundTasks,
-    confirm: bool = Query(False, description="ยืนยันการลบแบบถอนรากถอนโคน (จะลบทั้งกล้อง ผู้ใช้ และประวัติทั้งหมด)"),
+    confirm: bool = Query(False, description="ยืนยันการลบแบบถอนรากถอนโคน (จะลบกล้อง ผู้ใช้ และบัญชีดำทั้งหมด แต่ประวัติการตรวจจับจะถูกลบการเชื่อมโยงและเก็บไว้เป็นสถิติ)"),
     current_user: User = Depends(require_roles(UserRole.SUPERADMIN)),
     db: AsyncSession = Depends(get_db),
 ):

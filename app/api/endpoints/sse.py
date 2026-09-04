@@ -3,6 +3,7 @@ import asyncio
 import json
 import uuid
 from time import monotonic
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 from app.api.deps import require_roles
@@ -35,11 +36,11 @@ def _revalidation_due(last_revalidated_at: float) -> bool:
     return monotonic() - last_revalidated_at >= settings.sse_revalidation_interval_seconds
 
 
-async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id: uuid.UUID | None, queue: asyncio.Queue | None):
+async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id: uuid.UUID | None, ticket_password_changed_at: datetime, queue: asyncio.Queue | None):
     last_revalidated_at = monotonic()
     while True:
         if _revalidation_due(last_revalidated_at):
-            if not await session_validation_service.is_session_still_valid(user_id, village_id):
+            if not await session_validation_service.is_session_still_valid(user_id, village_id, ticket_password_changed_at):
                 break
             last_revalidated_at = monotonic()
 
@@ -66,7 +67,7 @@ async def create_sse_ticket(
 
 @router.get("/alerts")
 async def stream_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id = channel_service.alerts.resolve_ticket(ticket)
+    user_id, village_id, password_changed_at = channel_service.alerts.resolve_ticket(ticket)
 
     try:
         channel_service.alerts.register_connection(user_id)
@@ -77,7 +78,7 @@ async def stream_alerts(request: Request, ticket: str = Query(...)):
 
     async def event_generator():
         try:
-            async for event in _base_event_generator(request, user_id, village_id, queue):
+            async for event in _base_event_generator(request, user_id, village_id, password_changed_at, queue):
                 yield event
         finally:
             channel_service.alerts.unsubscribe(village_id, queue)
@@ -100,7 +101,7 @@ async def create_security_alert_ticket(
 
 @router.get("/security-alerts")
 async def stream_security_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id = channel_service.security_alerts.resolve_ticket(ticket)
+    user_id, village_id, password_changed_at = channel_service.security_alerts.resolve_ticket(ticket)
 
     try:
         channel_service.security_alerts.register_connection(user_id)
@@ -111,7 +112,7 @@ async def stream_security_alerts(request: Request, ticket: str = Query(...)):
 
     async def event_generator():
         try:
-            async for event in _base_event_generator(request, user_id, village_id, queue):
+            async for event in _base_event_generator(request, user_id, village_id, password_changed_at, queue):
                 yield event
         finally:
             channel_service.security_alerts.unsubscribe(village_id, queue)
@@ -153,7 +154,7 @@ async def stream_presence(request: Request, ticket: str = Query(...)):
                     "data": json.dumps(initial_snapshot, default=str),
                 }
 
-            async for event in _base_event_generator(request, ticket_data.user_id, ticket_data.village_id, watcher_queue):
+            async for event in _base_event_generator(request, ticket_data.user_id, ticket_data.village_id, ticket_data.password_changed_at, watcher_queue):
                 yield event
         finally:
             presence_service.unregister_watcher(ticket_data, watcher_queue)

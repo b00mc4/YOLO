@@ -137,6 +137,7 @@ class RouteTrackingDetectionEntry(BaseModel):
     village_name: str
     lat: float
     long: float
+    is_camera_deleted: bool
     direction: CameraDirection | None
     time_detect: datetime
     color: str

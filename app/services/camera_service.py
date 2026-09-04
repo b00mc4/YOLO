@@ -166,6 +166,7 @@ async def _sync_camera_update(
     village_id: uuid.UUID,
     camera_name: str,
     is_active: bool | None,
+    stream_ai: str | None = None,
 ) -> None:
     failed_services: list[str] = []
 
@@ -173,6 +174,15 @@ async def _sync_camera_update(
         status_ok = await ai_vision_service.set_camera_active_status(camera_id, is_active)
         if not status_ok:
             failed_services.append("ai_vision")
+            
+        if is_active and stream_ai:
+            mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
+            if not mediamtx_ok:
+                failed_services.append("mediamtx")
+        elif not is_active:
+            mediamtx_ok = await mediamtx_service.remove_path(camera_id)
+            if not mediamtx_ok:
+                failed_services.append("mediamtx")
 
     if failed_services:
         await notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
@@ -427,6 +437,7 @@ async def update_camera(
             camera.village_id,
             camera.name,
             camera.is_active,
+            camera.stream_ai,
         )
     elif is_active_changed:
         logger.info(
