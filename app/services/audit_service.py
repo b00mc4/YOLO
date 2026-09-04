@@ -106,19 +106,19 @@ async def list_audit_logs(
         created_at_to,
     )
 
-    count_result = await db.execute(
-        select(func.count())
-        .select_from(AuditLog)
-        .outerjoin(User, AuditLog.user_id == User.id)
-        .where(*filters)
-    )
+    count_stmt = select(func.count()).select_from(AuditLog)
+    stmt = select(AuditLog, Group.name).outerjoin(Group, AuditLog.village_id == Group.id)
+
+    if current_user.role != UserRole.SUPERADMIN:
+        count_stmt = count_stmt.outerjoin(User, AuditLog.user_id == User.id)
+        stmt = stmt.outerjoin(User, AuditLog.user_id == User.id)
+
+    count_stmt = count_stmt.where(*filters)
+    count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
     stmt = (
-        select(AuditLog, Group.name)
-        .outerjoin(Group, AuditLog.village_id == Group.id)
-        .outerjoin(User, AuditLog.user_id == User.id)
-        .where(*filters)
+        stmt.where(*filters)
         .order_by(AuditLog.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

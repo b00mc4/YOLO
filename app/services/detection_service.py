@@ -445,7 +445,8 @@ async def list_detections(
     if direction is not None:
         stmt = stmt.where(Car.direction == direction)
 
-    count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    count_stmt = stmt.with_only_columns(func.count()).order_by(None)
+    count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
     stmt = (
