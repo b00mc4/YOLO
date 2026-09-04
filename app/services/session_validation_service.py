@@ -20,14 +20,15 @@ async def is_session_still_valid(user_id: uuid.UUID, village_id: uuid.UUID | Non
         if not user_is_active:
             return False
             
-        from datetime import timezone
-        if db_password_changed_at.tzinfo is None:
-            db_password_changed_at = db_password_changed_at.replace(tzinfo=timezone.utc)
-        if ticket_password_changed_at.tzinfo is None:
-            ticket_password_changed_at = ticket_password_changed_at.replace(tzinfo=timezone.utc)
-            
-        if db_password_changed_at > ticket_password_changed_at:
-            return False
+        if db_password_changed_at is not None:
+            from datetime import timezone
+            if db_password_changed_at.tzinfo is None:
+                db_password_changed_at = db_password_changed_at.replace(tzinfo=timezone.utc)
+            if ticket_password_changed_at.tzinfo is None:
+                ticket_password_changed_at = ticket_password_changed_at.replace(tzinfo=timezone.utc)
+                
+            if db_password_changed_at > ticket_password_changed_at:
+                return False
 
         if village_id is None:
             return True

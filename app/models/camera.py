@@ -30,7 +30,7 @@ class Camera(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id"), nullable=False, index=True)
+    village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     lat = Column(Float(53), nullable=False)
     long = Column(Float(53), nullable=False)

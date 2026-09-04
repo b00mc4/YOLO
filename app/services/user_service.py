@@ -368,6 +368,10 @@ async def set_user_active_status(
         village_id=target.village_id,
     )
 
+    if not payload.is_active and previous_is_active:
+        await auth_service.revoke_all_refresh_tokens(db, target.id)
+        session_manager.remove_all_sessions(target.id)
+
     await db.commit()
     await db.refresh(target)
     return await _to_user_detail(db, request, target)

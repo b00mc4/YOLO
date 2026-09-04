@@ -211,6 +211,19 @@ async def delete_village(
 
     village_name = village.name
 
+    # ดึง User ทั้งหมดในหมู่บ้าน
+    users_result = await db.execute(select(User.id).where(User.village_id == village_id))
+    user_ids = users_result.scalars().all()
+    
+    if user_ids:
+        from app.models.contact import Contact
+        from app.models.notification import Notification
+        from app.models.refresh_token import RefreshToken
+        # ลบข้อมูลที่ผูกกับ User ก่อนลบ User
+        await db.execute(delete(Contact).where(Contact.user_id.in_(user_ids)))
+        await db.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))
+        await db.execute(delete(RefreshToken).where(RefreshToken.user_id.in_(user_ids)))
+
     # Manually cascade delete to prevent ForeignKey constraint errors
     await db.execute(delete(Blacklist).where(Blacklist.village_id == village_id))
     await db.execute(delete(Whitelist).where(Whitelist.village_id == village_id))

@@ -20,7 +20,7 @@ class Whitelist(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id"), nullable=False)
+    village_id = Column(UUID(as_uuid=True), ForeignKey("GroupTABLE.id", ondelete="CASCADE"), nullable=False)
     name = Column(String(255), nullable=False)
     house_no = Column(String(255), nullable=True)
     phone = Column(String(20), nullable=True)
