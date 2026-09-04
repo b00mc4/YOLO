@@ -153,29 +153,17 @@ async def _confirm_bytes_flowing(camera_id: uuid.UUID, baseline_bytes: int) -> b
     return info["bytes_received"] > baseline_bytes
 
 
-async def check_source_alive(camera_id: uuid.UUID) -> bool | None:
+async def check_source_alive(camera_id: uuid.UUID) -> tuple[bool, bool]:
     baseline = await _get_path_info(camera_id)
 
-    if baseline is None:
-        return None
-
-    if not baseline.get("exists"):
-        logger.warning("MediaMTX path missing for camera_id=%s during status check", camera_id)
-        return False
+    if baseline is None or not baseline.get("exists"):
+        return False, False
 
     if baseline["ready"]:
-        return await _confirm_bytes_flowing(camera_id, baseline["bytes_received"])
+        return True, False
 
-    if not _trigger_cooldown.allow(str(camera_id), cooldown_seconds=_TRIGGER_COOLDOWN_SECONDS):
-        logger.info("MediaMTX trigger skipped for camera_id=%s due to cooldown", camera_id)
-        return False
+    if _trigger_cooldown.allow(str(camera_id), cooldown_seconds=_TRIGGER_COOLDOWN_SECONDS):
+        logger.info("Triggering MediaMTX on-demand pull for camera_id=%s in background", camera_id)
+        asyncio.create_task(_trigger_on_demand_pull(camera_id))
 
-    became_ready = await _wait_for_ready_after_trigger(camera_id)
-    if not became_ready:
-        return False
-
-    post_trigger_info = await _get_path_info(camera_id)
-    if post_trigger_info is None or not post_trigger_info.get("exists"):
-        return False
-
-    return await _confirm_bytes_flowing(camera_id, post_trigger_info["bytes_received"])
+    return False, True

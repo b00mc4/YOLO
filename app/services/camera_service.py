@@ -267,7 +267,7 @@ async def get_camera_detail(db: AsyncSession, current_user: User, camera_id: uui
 
 async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uuid.UUID) -> CameraStatusRead:
     camera = await get_camera(db, current_user, camera_id)
-    stream_online = await mediamtx_service.check_source_alive(camera.id)
+    stream_online, is_starting = await mediamtx_service.check_source_alive(camera.id)
 
     status = True
     details = []
@@ -280,19 +280,21 @@ async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uui
         status = False
         details.append(f"Verification status is '{camera.verification_status.value}'")
 
-    if not stream_online:
+    if not stream_online and not is_starting:
         status = False
         details.append("Stream is offline")
-
-    detail_str = ", ".join(details) if not status else None
+    elif is_starting:
+        status = False
+        details.append("Stream is starting")
 
     return CameraStatusRead(
         id=camera.id,
         is_active=camera.is_active,
         verification_status=camera.verification_status,
         stream_online=stream_online,
+        is_starting=is_starting,
         status=status,
-        detail=detail_str,
+        detail=", ".join(details) if details else None,
     )
 
 async def get_camera_stream_token(

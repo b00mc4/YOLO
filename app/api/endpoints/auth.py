@@ -131,7 +131,7 @@ async def logout(
 @router.post(
     "/forgot-password",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(rate_limit_by_ip("forgot_password_ip", 30, 60))],
+    dependencies=[Depends(rate_limit_by_ip("forgot_password_ip", _FORGOT_PASSWORD_IP_LIMIT, _FORGOT_PASSWORD_IP_WINDOW_SECONDS))],
 )
 async def forgot_password(
     payload: ForgotPasswordRequest,

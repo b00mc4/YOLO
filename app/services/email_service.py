@@ -155,10 +155,10 @@ async def send_bulk_plain_email(
 
     failed_recipients: list[str] = []
     try:
-        for to_email in to_emails:
+        if to_emails:
             message = EmailMessage()
             message["From"] = settings.smtp_from_email
-            message["To"] = to_email
+            message["Bcc"] = ", ".join(to_emails)
             message["Subject"] = subject
             message.set_content(text_body)
             message.add_alternative(html_body, subtype="html")
@@ -166,8 +166,8 @@ async def send_bulk_plain_email(
             try:
                 await smtp.send_message(message)
             except Exception:
-                logger.warning("Failed to send bulk email to %s", to_email)
-                failed_recipients.append(to_email)
+                logger.warning("Failed to send bulk email via BCC")
+                failed_recipients.extend(to_emails)
     finally:
         await smtp.quit()
 

@@ -13,6 +13,11 @@ from app.schemas.car import RepeatedPlateEntry
 from app.schemas.report import HourlyBucket, ReportDailyRead, ReportSummaryRead
 from app.core.timezone import BANGKOK_TZ
 from app.core.error_messages import Common
+import time
+
+_REPORT_CACHE: dict[str, dict] = {}
+_REPORT_CACHE_TTL = 60  # เก็บแคช 60 วินาที
+_cache_lock = asyncio.Lock()
 
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _TOP_PLATES_LIMIT = 5
@@ -137,18 +142,30 @@ async def get_report_summary(
     village_id: uuid.UUID | None,
     days: int,
 ) -> ReportSummaryRead:
+    cache_key = f"summary:{current_user.id}:{village_id}:{days}"
+    async with _cache_lock:
+        if cache_key in _REPORT_CACHE:
+            entry = _REPORT_CACHE[cache_key]
+            if time.time() - entry["time"] < _REPORT_CACHE_TTL:
+                return entry["data"]
+
     date_from, date_to, start_utc, end_utc = _bangkok_day_range_bounds(days)
     scope_filters = _build_report_scope_filters(current_user, village_id)
     base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
 
     metrics = await _collect_report_metrics(db, base_filters)
 
-    return ReportSummaryRead(
+    result = ReportSummaryRead(
         days=days,
         date_from=date_from,
         date_to=date_to,
         **metrics,
     )
+
+    async with _cache_lock:
+        _REPORT_CACHE[cache_key] = {"time": time.time(), "data": result}
+        
+    return result
 
 
 async def get_report_daily(
@@ -157,13 +174,25 @@ async def get_report_daily(
     village_id: uuid.UUID | None,
     target_date: date,
 ) -> ReportDailyRead:
+    cache_key = f"daily:{current_user.id}:{village_id}:{target_date.isoformat()}"
+    async with _cache_lock:
+        if cache_key in _REPORT_CACHE:
+            entry = _REPORT_CACHE[cache_key]
+            if time.time() - entry["time"] < _REPORT_CACHE_TTL:
+                return entry["data"]
+
     start_utc, end_utc = _bangkok_single_day_bounds(target_date)
     scope_filters = _build_report_scope_filters(current_user, village_id)
     base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
 
     metrics = await _collect_report_metrics(db, base_filters)
 
-    return ReportDailyRead(
+    result = ReportDailyRead(
         date=target_date,
         **metrics,
     )
+
+    async with _cache_lock:
+        _REPORT_CACHE[cache_key] = {"time": time.time(), "data": result}
+
+    return result

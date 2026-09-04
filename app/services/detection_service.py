@@ -648,16 +648,18 @@ def _build_route_tracking_filters(
     start_utc: datetime,
     end_utc: datetime,
 ) -> list:
+    escaped_plate = normalized_plate.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     filters = [
         *scope_filters,
-        Car.license_plate.ilike(f"%{normalized_plate}%"),
+        Car.license_plate.ilike(f"%{escaped_plate}%", escape="\\"),
         Car.time_detect >= start_utc,
         Car.time_detect < end_utc,
     ]
     if province is not None:
         filters.append(Car.province == province)
     if color is not None:
-        filters.append(Car.color.ilike(f"%{color}%"))
+        escaped_color = color.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        filters.append(Car.color.ilike(f"%{escaped_color}%", escape="\\"))
     if direction is not None:
         filters.append(Car.direction == direction)
     return filters

@@ -133,6 +133,7 @@ class CameraStatusRead(BaseModel):
     is_active: bool
     verification_status: CameraVerificationStatus
     stream_online: bool | None
+    is_starting: bool = False
     status: bool
     detail: str | None = None
 

@@ -3,7 +3,7 @@ import re
 from app.models.contact import ContactType
 from app.core.error_messages import ContactErrors
 
-_PHONE_PATTERN = re.compile(r"^[0-9-]{12}$")
+_PHONE_PATTERN = re.compile(r"^0[0-9]{2}-[0-9]{3}-[0-9]{4}$")
 _LINE_PATTERN = re.compile(r"^[a-z0-9._-]{4,20}$")
 _INSTAGRAM_PATTERN = re.compile(r"^[a-z0-9._]{1,30}$")
 

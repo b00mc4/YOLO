@@ -260,6 +260,7 @@ async def handle_blacklist_detection(
                 User.village_id == village_id,
                 User.role.in_((UserRole.USER, UserRole.ADMIN)),
                 User.is_active.is_(True),
+                User.email.is_not(None),
             )
         )
         recipients = list(result.scalars().all())

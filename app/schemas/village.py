@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.user import UserRole
 from app.schemas.camera import CameraBasicRead
 
-_ADDRESS_PATTERN = re.compile(r"^[A-Za-z0-9ก-ฮะ-๙\s\/\.\,\-]+$")
+_ADDRESS_PATTERN = re.compile(r"^[A-Za-z0-9\u0E00-\u0E7F\s\/\.\,\-]+$")
 _NO_EMOJI_REGEX = re.compile(r"^[\u0E00-\u0E7F\x20-\x7E]+$")
 
 

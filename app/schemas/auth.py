@@ -37,6 +37,11 @@ class SetPasswordResponse(BaseModel):
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr = Field(max_length=255)
 
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, v: str) -> str:
+        return v.strip().lower()
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(max_length=128)
     new_password: str = Field(max_length=36)
