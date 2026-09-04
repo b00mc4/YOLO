@@ -518,6 +518,9 @@ async def delete_user(
     # เตะ User ออกจาก Session ใน Memory ทันทีที่โดนลบ
     session_manager.remove_all_sessions(target.id)
     
+    # ลบ Refresh Token ออกจากฐานข้อมูล
+    await auth_service.revoke_all_refresh_tokens(db, target.id)
+    
     await db.delete(target)
     await db.commit()
 

@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.db.session import get_db
-from app.models.user import User
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service

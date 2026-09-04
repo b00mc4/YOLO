@@ -109,6 +109,9 @@ def require_roles(*roles: UserRole):
     return checker
 
 
+from app.services import audit_service
+from app.core.request_utils import get_client_ip
+
 def verify_village_scope(user: User, target_village_id: uuid.UUID) -> None:
     if user.role == UserRole.SUPERADMIN:
         return
@@ -131,8 +134,6 @@ async def verify_api_key(
             _API_KEY_FAILURE_WINDOW_SECONDS,
         )
 
-        from app.services import audit_service
-
         await audit_service.log_action(
             db,
             request,
@@ -144,15 +145,6 @@ async def verify_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=Auth.INVALID_API_KEY,
         )
-
-def get_client_ip(request: Request) -> str:
-    if settings.trust_proxy_headers:
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            hops = [hop.strip() for hop in forwarded_for.split(",")]
-            if len(hops) >= settings.trusted_proxy_hops:
-                return hops[-settings.trusted_proxy_hops]
-    return request.client.host if request.client else ""
 
 
 def rate_limit_by_ip(prefix: str, limit: int, window_seconds: float):

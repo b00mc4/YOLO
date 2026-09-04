@@ -51,19 +51,22 @@ async def _run_verification_loop(camera_id: uuid.UUID) -> None:
         while True:
             await asyncio.sleep(_POLL_INTERVAL_SECONDS)
 
-            result = await ai_vision_service.check_camera_verification(camera_id)
+            try:
+                result = await ai_vision_service.check_camera_verification(camera_id)
 
-            if result == VerificationCheckResult.VERIFIED:
-                await _finalize(camera_id, verified=True, reason="verified by ai vision service")
-                return
+                if result == VerificationCheckResult.VERIFIED:
+                    await _finalize(camera_id, verified=True, reason="verified by ai vision service")
+                    return
 
-            if result == VerificationCheckResult.NOT_FOUND:
-                await _finalize(
-                    camera_id,
-                    verified=False,
-                    reason="ai vision service exceeded its verification retry quota and removed the camera",
-                )
-                return
+                if result == VerificationCheckResult.NOT_FOUND:
+                    await _finalize(
+                        camera_id,
+                        verified=False,
+                        reason="ai vision service exceeded its verification retry quota and removed the camera",
+                    )
+                    return
+            except Exception as e:
+                logger.error("Unexpected error in camera %s verification loop: %s", camera_id, e)
 
             if monotonic() >= deadline:
                 await _handle_verification_timeout(camera_id)

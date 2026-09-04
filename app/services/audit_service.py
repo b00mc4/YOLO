@@ -9,7 +9,7 @@ from app.models.group import Group
 from app.models.user import User, UserRole
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.common import PaginatedResponse
-from app.api.deps import get_client_ip
+from app.core.request_utils import get_client_ip
 
 
 _DETAIL_MAX_LENGTH = 1000

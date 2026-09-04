@@ -74,6 +74,23 @@ class ContactUpdate(BaseModel):
     def normalize_custom_label(cls, v: str | None) -> str | None:
         return v.strip() if v is not None else v
 
+    @model_validator(mode="after")
+    def check_custom_label_matches_content_type(self) -> ContactUpdate:
+        if self.content_type == ContactType.OTHER:
+            if not self.custom_label:
+                raise ValueError(ContactErrors.CUSTOM_LABEL_REQUIRED)
+            if not _THAI_ENG_PATTERN.fullmatch(self.custom_label):
+                raise ValueError(ContactErrors.INVALID_OTHER_FORMAT)
+            if self.value is not None and not _THAI_ENG_PATTERN.fullmatch(self.value):
+                raise ValueError(ContactErrors.INVALID_OTHER_FORMAT)
+        elif self.content_type is not None:
+            if self.custom_label is not None:
+                raise ValueError(ContactErrors.CUSTOM_LABEL_NOT_ALLOWED)
+        else:
+            if self.custom_label is not None and not _THAI_ENG_PATTERN.fullmatch(self.custom_label):
+                raise ValueError(ContactErrors.INVALID_OTHER_FORMAT)
+        return self
+
 
 class ContactRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
