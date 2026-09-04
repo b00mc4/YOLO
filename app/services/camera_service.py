@@ -55,11 +55,9 @@ async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[boo
 
     should_verify = False
     if ai_vision_pushed:
-        active_ok = await ai_vision_service.set_camera_active_status(camera_id, True)
-        if active_ok:
-            should_verify = True
-        else:
-            failed_services.append("ai_vision")
+        # AI Vision resets verification_status to 'pending' when stream config is pushed.
+        # We must verify the RTSP stream first before we can activate it (is_active=True).
+        should_verify = True
 
     return should_verify, failed_services
 
