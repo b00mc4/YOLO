@@ -133,6 +133,8 @@ class CameraStatusRead(BaseModel):
     is_active: bool
     verification_status: CameraVerificationStatus
     stream_online: bool | None
+    status: bool
+    detail: str | None = None
 
 
 class CameraResyncFailedEntry(BaseModel):
