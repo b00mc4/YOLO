@@ -65,6 +65,19 @@ async def create_blacklist_entry(
     village_id = await resolve_village_id(db, current_user, payload.village_id)
     await _check_not_whitelisted(db, village_id, payload.license_plate, payload.province)
 
+    existing = await db.execute(
+        select(Blacklist.id).where(
+            Blacklist.village_id == village_id,
+            Blacklist.license_plate == payload.license_plate,
+            Blacklist.province == payload.province,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ป้ายทะเบียนนี้มีอยู่ในบัญชีดำของหมู่บ้านนี้แล้ว",
+        )
+
     entry = Blacklist(
         village_id=village_id,
         license_plate=payload.license_plate,

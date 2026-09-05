@@ -188,6 +188,10 @@ async def _handle_verification_timeout(camera_id: uuid.UUID) -> None:
         await notification_service.notify_superadmins(db, action, detail)
         await db.commit()
 
+        from app.services import ai_vision_service, mediamtx_service
+        await ai_vision_service.set_camera_active_status(camera.id, False)
+        await mediamtx_service.remove_path(camera.id)
+
         village_id = camera.village_id
         camera_id_value = camera.id
         camera_name = camera.name

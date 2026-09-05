@@ -4,7 +4,7 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="forbid")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
 

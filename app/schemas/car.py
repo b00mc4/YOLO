@@ -129,11 +129,11 @@ class DetectionCreateAck(BaseModel):
 class RouteTrackingDetectionEntry(BaseModel):
     detection_id: uuid.UUID
     camera_id: uuid.UUID | None
-    camera_name: str
+    camera_name: str | None = None
     village_id: uuid.UUID | None
-    village_name: str
-    lat: float
-    long: float
+    village_name: str | None = None
+    lat: float | None = None
+    long: float | None = None
     is_camera_deleted: bool
     direction: CameraDirection | None
     time_detect: datetime

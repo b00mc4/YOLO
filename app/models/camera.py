@@ -57,4 +57,4 @@ class Camera(Base):
     is_active = Column(Boolean, nullable=False, server_default=true())
 
     village = relationship("Group", back_populates="cameras")
-    detections = relationship("Car", back_populates="camera")
+    detections = relationship("Car", back_populates="camera", passive_deletes=True)

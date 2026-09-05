@@ -120,9 +120,13 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
         await db.commit()
 
         if locked_for_seconds is not None:
-            await login_security_service.publish_bruteforce_alert(
-                username, user, locked_for_seconds, get_client_ip(request)
-            )
+            try:
+                await login_security_service.publish_bruteforce_alert(
+                    username, user, locked_for_seconds, get_client_ip(request)
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Failed to publish bruteforce alert: {e}")
             raise AccountLocked(retry_after_seconds=locked_for_seconds)
 
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_GENERIC_LOGIN_ERROR)
@@ -214,6 +218,7 @@ async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str):
 async def revoke_all_refresh_tokens(db: AsyncSession, user_id: uuid.UUID):
     session_manager.remove_all_sessions(user_id)
     await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+    await db.commit()
     
 
 async def change_password(
@@ -332,6 +337,9 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
 
     if user is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.INVALID_OR_EXPIRED_TOKEN)
+
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=Auth.ACCOUNT_INACTIVE)
 
     user.hashpassword = await hash_password(new_password)
     user.password_changed_at = datetime.now(timezone.utc)

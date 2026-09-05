@@ -47,6 +47,7 @@ from app.services import (
 import logging
 from app.core.timezone import BANGKOK_TZ
 from app.core.error_messages import Common, DetectionErrors, CameraErrors
+from app.core.scope_utils import build_scope_filters
 
 
 _MAX_ROUTE_TRACKING_RANGE_DAYS = 360
@@ -658,7 +659,7 @@ async def get_route_tracking(
     if not normalized_plate:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=DetectionErrors.LICENSE_PLATE_REQUIRED)
 
-    scope_filters = _build_detection_list_scope_filters(current_user, village_id)
+    scope_filters = build_scope_filters(current_user, village_id, Car)
     start_utc, end_utc = _validate_route_tracking_date_range(date_from, date_to)
     filters = _build_route_tracking_filters(
         scope_filters, normalized_plate, province, color, direction, start_utc, end_utc

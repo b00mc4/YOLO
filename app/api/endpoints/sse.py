@@ -48,13 +48,16 @@ async def _base_event_generator(request: Request, user_id: uuid.UUID, village_id
             await asyncio.sleep(_PING_INTERVAL_SECONDS)
             continue
 
+        if await request.is_disconnected():
+            break
+
         try:
             event = await asyncio.wait_for(queue.get(), timeout=_PING_INTERVAL_SECONDS)
             if event is CLOSE_SENTINEL:
                 break
             yield {"event": event["event"], "data": json.dumps(event["data"], default=str)}
         except asyncio.TimeoutError:
-            pass
+            yield {"event": "ping", "data": ""}
 
 
 @router.post("/ticket", response_model=SSETicketResponse, status_code=status.HTTP_201_CREATED)

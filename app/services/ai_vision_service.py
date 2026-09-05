@@ -125,7 +125,7 @@ async def delete_camera(camera_id: uuid.UUID) -> CameraDeleteResult:
         logger.warning("ai vision delete_camera request failed for %s: %s", camera_id, exc)
         return CameraDeleteResult.UNREACHABLE
 
-    if response.status_code == 200:
+    if response.status_code in (200, 204):
         return CameraDeleteResult.DELETED
 
     if response.status_code == 404:

@@ -60,6 +60,22 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
         logger.error("MediaMTX upsert_path request failed for %s: %s", camera_id, exc)
         return False
 
+    if response.status_code == 404:
+        add_url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/add/{path_name}"
+        try:
+            response = await _client.post(
+                add_url,
+                json={
+                    "source": source_rtsp_url,
+                    "sourceOnDemand": True,
+                    "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+                },
+                auth=_auth(),
+            )
+        except httpx.HTTPError as exc:
+            logger.error("MediaMTX upsert_path (add fallback) request failed for %s: %s", camera_id, exc)
+            return False
+
     if response.status_code >= 400:
         logger.error(
             "MediaMTX upsert_path rejected for %s: status=%s body=%s",

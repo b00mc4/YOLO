@@ -92,12 +92,12 @@ def build_detection_image_path(
     extension: str,
 ) -> str:
     relative_path = Path(str(village_id)) / str(camera_id) / f"{image_id}_{suffix}.{extension}"
-    return str(relative_path)
+    return relative_path.as_posix()
 
 
 def build_avatar_path(user_id: uuid.UUID, image_id: uuid.UUID, extension: str) -> str:
     relative_path = Path("avatars") / str(user_id) / f"{image_id}.{extension}"
-    return str(relative_path)
+    return relative_path.as_posix()
 
 
 def _write_file(path: Path, content: bytes) -> None:

@@ -140,8 +140,8 @@ async def send_bulk_plain_email(
     text_body: str,
     html_body: str,
 ) -> list[str]:
+    smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
     try:
-        smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
         await smtp.connect()
         try:
             await smtp.starttls()
@@ -149,12 +149,8 @@ async def send_bulk_plain_email(
             if "already using TLS" not in str(e):
                 raise
         await smtp.login(settings.smtp_user, settings.smtp_password)
-    except Exception:
-        _email_health.mark_failure()
-        raise
 
-    failed_recipients: list[str] = []
-    try:
+        failed_recipients: list[str] = []
         if to_emails:
             message = EmailMessage()
             message["From"] = settings.smtp_from_email
@@ -168,8 +164,14 @@ async def send_bulk_plain_email(
             except Exception:
                 logger.warning("Failed to send bulk email via BCC")
                 failed_recipients.extend(to_emails)
+    except Exception:
+        _email_health.mark_failure()
+        raise
     finally:
-        await smtp.quit()
+        try:
+            await smtp.quit()
+        except Exception:
+            pass
 
     _email_health.mark_recovered()
     return failed_recipients

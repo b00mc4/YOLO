@@ -25,12 +25,6 @@ _STARTUP_RESYNC_BACKOFF_BASE_SECONDS = 2.0
 async def _run_cleanup_loop(name: str, interval: int, task_fn) -> None:
     consecutive_errors = 0
     while True:
-        if consecutive_errors > 0:
-            backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
-            await asyncio.sleep(backoff)
-        else:
-            await asyncio.sleep(interval)
-            
         try:
             async with async_session_maker() as db:
                 deleted = await task_fn(db)
@@ -40,6 +34,12 @@ async def _run_cleanup_loop(name: str, interval: int, task_fn) -> None:
         except Exception:
             consecutive_errors += 1
             logger.exception("%s cleanup loop iteration failed (error count: %s)", name, consecutive_errors)
+
+        if consecutive_errors > 0:
+            backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
+            await asyncio.sleep(backoff)
+        else:
+            await asyncio.sleep(interval)
 
 async def _startup_camera_resync_background() -> None:
     for attempt in range(1, _STARTUP_RESYNC_MAX_ATTEMPTS + 1):

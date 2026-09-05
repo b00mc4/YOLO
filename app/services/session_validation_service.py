@@ -7,20 +7,20 @@ from app.models.group import Group
 from app.models.user import User
 
 
-async def is_session_still_valid(user_id: uuid.UUID, village_id: uuid.UUID | None, ticket_password_changed_at: datetime) -> bool:
+async def is_session_still_valid(user_id: uuid.UUID, village_id: uuid.UUID | None, ticket_password_changed_at: datetime | None) -> bool:
     async with async_session_maker() as db:
-        user_result = await db.execute(select(User.is_active, User.password_changed_at).where(User.id == user_id))
+        user_result = await db.execute(select(User.is_active, User.password_changed_at, User.village_id).where(User.id == user_id))
         user_row = user_result.one_or_none()
         
         if user_row is None:
             return False
             
-        user_is_active, db_password_changed_at = user_row
+        user_is_active, db_password_changed_at, db_village_id = user_row
 
         if not user_is_active:
             return False
             
-        if db_password_changed_at is not None:
+        if db_password_changed_at is not None and ticket_password_changed_at is not None:
             from datetime import timezone
             if db_password_changed_at.tzinfo is None:
                 db_password_changed_at = db_password_changed_at.replace(tzinfo=timezone.utc)
@@ -29,6 +29,9 @@ async def is_session_still_valid(user_id: uuid.UUID, village_id: uuid.UUID | Non
                 
             if db_password_changed_at > ticket_password_changed_at:
                 return False
+
+        if village_id is not None and db_village_id is not None and village_id != db_village_id:
+            return False
 
         if village_id is None:
             return True

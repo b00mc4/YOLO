@@ -214,7 +214,7 @@ async def create_user(
                 detail=UserErrors.CANNOT_CREATE_ADMIN_OR_SUPERADMIN,
             )
         village_id = current_user.village_id
-    else:
+    elif current_user.role == UserRole.SUPERADMIN:
         village_id = payload.village_id
         if payload.role != UserRole.SUPERADMIN:
             village = await village_service.get_village(db, village_id)
@@ -223,6 +223,11 @@ async def create_user(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=Auth.VILLAGE_INACTIVE,
                 )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Role not authorized to create users.",
+        )
 
     if payload.role == UserRole.USER:
         existing_admin_count_result = await db.execute(
