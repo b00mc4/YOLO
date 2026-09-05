@@ -36,8 +36,11 @@ async def log_action(
         user_agent = _BACKGROUND_USER_AGENT
 
     if actor_username is None and user_id is not None:
-        user_result = await db.execute(select(User.username).where(User.id == user_id))
-        actor_username = user_result.scalar_one_or_none()
+        if request is not None and hasattr(request.state, "user") and request.state.user.id == user_id:
+            actor_username = request.state.user.username
+        else:
+            user_result = await db.execute(select(User.username).where(User.id == user_id))
+            actor_username = user_result.scalar_one_or_none()
 
     entry = AuditLog(
         village_id=village_id,

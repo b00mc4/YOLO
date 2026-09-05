@@ -15,7 +15,7 @@ from app.models.user import User, UserRole
 from app.schemas.blacklist import BlacklistCreate, BlacklistRead, BlacklistUpdate
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service, village_service, email_service
-from app.core.error_messages import BlacklistErrors, Common, Auth
+from app.core.error_messages import BlacklistErrors, Common, Auth, Auth
 
 
 from app.core.config import get_settings
@@ -25,6 +25,13 @@ settings = get_settings()
 
 
 from app.core.scope_utils import resolve_village_id, build_scope_filters
+
+async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Blacklist:
+    result = await db.execute(select(Blacklist).where(Blacklist.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=BlacklistErrors.NOT_FOUND)
+    return entry
 
 async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Blacklist:
     result = await db.execute(select(Blacklist).where(Blacklist.id == entry_id))

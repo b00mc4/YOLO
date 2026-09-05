@@ -520,6 +520,10 @@ async def delete_user(
         village_id=target.village_id,
     )
 
+    from app.models.notification import Notification
+    await db.execute(delete(Notification).where(Notification.user_id == target.id))
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == target.id))
+    
     # เตะ User ออกจาก Session ใน Memory ทันทีที่โดนลบ
     session_manager.remove_all_sessions(target.id)
     

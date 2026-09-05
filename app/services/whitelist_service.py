@@ -10,7 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.common import PaginatedResponse
 from app.schemas.whitelist import WhitelistCreate, WhitelistRead, WhitelistUpdate
 from app.services import audit_service, village_service
-from app.core.error_messages import Common, WhitelistErrors, Auth
+from app.core.error_messages import Common, WhitelistErrors, Auth, Auth
 
 
 from app.core.scope_utils import resolve_village_id, build_scope_filters

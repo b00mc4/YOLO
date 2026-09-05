@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
-from app.db.session import async_session_maker
+from app.db.session import async_session_maker, engine
 from app.services import ai_vision_service, auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service, detection_service
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
@@ -110,6 +110,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await mediamtx_service.close()
     await ai_vision_service.close()
+    await engine.dispose()
 
 
 app = FastAPI(

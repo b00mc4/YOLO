@@ -28,6 +28,7 @@ _API_KEY_FAILURE_WINDOW_SECONDS = 5 * 60
 from app.core.session_manager import session_manager
 
 async def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ):
@@ -85,7 +86,7 @@ async def get_current_user(
             headers=_UNAUTHORIZED_HEADERS,
         )
 
-    pca = user.password_changed_at
+    pca = user.password_changed_at.replace(microsecond=0)
     if pca.tzinfo is None:
         pca = pca.replace(tzinfo=timezone.utc)
     if issued_at < pca:
@@ -95,6 +96,7 @@ async def get_current_user(
             headers=_UNAUTHORIZED_HEADERS,
         )
 
+    request.state.user = user
     return user
 
 def require_roles(*roles: UserRole):

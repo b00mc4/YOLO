@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from fastapi import BackgroundTasks, HTTPException, Request, status
-from sqlalchemy import func, select, update, delete
+from sqlalchemy import func, select, update, delete, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 from app.models.blacklist import Blacklist

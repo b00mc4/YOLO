@@ -19,6 +19,13 @@ _REPORT_CACHE: dict[str, dict] = {}
 _REPORT_CACHE_TTL = 60  # เก็บแคช 60 วินาที
 _cache_lock = asyncio.Lock()
 
+def _set_cache(key: str, data: any) -> None:
+    now = time.time()
+    _REPORT_CACHE[key] = {"time": now, "data": data}
+    stale = [k for k, v in _REPORT_CACHE.items() if now - v["time"] > _REPORT_CACHE_TTL]
+    for k in stale:
+        _REPORT_CACHE.pop(k, None)
+
 _BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 _TOP_PLATES_LIMIT = 5
 
@@ -163,7 +170,7 @@ async def get_report_summary(
     )
 
     async with _cache_lock:
-        _REPORT_CACHE[cache_key] = {"time": time.time(), "data": result}
+        _set_cache(cache_key, result)
         
     return result
 
@@ -193,6 +200,6 @@ async def get_report_daily(
     )
 
     async with _cache_lock:
-        _REPORT_CACHE[cache_key] = {"time": time.time(), "data": result}
+        _set_cache(cache_key, result)
 
     return result

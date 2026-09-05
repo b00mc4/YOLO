@@ -24,7 +24,7 @@ from app.schemas.camera import (
     CameraVerificationCheckRead,
 )
 from app.schemas.common import PaginatedResponse
-from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service, channel_service
+from app.services import ai_vision_service, audit_service, camera_verification_service, mediamtx_service, notification_service, channel_service, channel_service
 from app.services.ai_vision_service import VerificationCheckResult
 from app.core.error_messages import CameraErrors, Common, VillageErrors
 
@@ -218,6 +218,13 @@ async def create_camera(
             detail=CameraErrors.NAME_ALREADY_EXISTS,
         )
 
+    existing_stream_result = await db.execute(select(Camera).where(Camera.stream_ai == payload.stream_ai))
+    if existing_stream_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="RTSP URL (stream_ai) is already in use by another camera",
+        )
+
     camera = Camera(
         village_id=village_id,
         name=payload.name,
@@ -393,6 +400,13 @@ async def update_camera(
             detail=CameraErrors.CANNOT_ACTIVATE_VILLAGE_INACTIVE,
         )
 
+
+    if "is_active" in update_data and update_data["is_active"] and not village.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CameraErrors.CANNOT_ACTIVATE_VILLAGE_INACTIVE,
+        )
+
     
     if "name" in update_data and update_data["name"] != camera.name:
         existing_name_result = await db.execute(select(Camera).where(Camera.village_id == camera.village_id, Camera.name == update_data["name"]))
@@ -402,7 +416,16 @@ async def update_camera(
                 detail=CameraErrors.NAME_ALREADY_EXISTS,
             )
 
+    if "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai:
+        existing_stream_result = await db.execute(select(Camera).where(Camera.stream_ai == update_data["stream_ai"]))
+        if existing_stream_result.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="RTSP URL (stream_ai) is already in use by another camera",
+            )
+
     is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
+    stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
 
     for field, value in update_data.items():
         setattr(camera, field, value)
@@ -429,7 +452,7 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
 
-    if is_active_changed and village.is_active:
+    if (is_active_changed or stream_ai_changed) and village.is_active:
         background_tasks.add_task(
             _sync_camera_update,
             camera.id,
@@ -438,7 +461,7 @@ async def update_camera(
             camera.is_active,
             camera.stream_ai,
         )
-    elif is_active_changed:
+    elif is_active_changed or stream_ai_changed:
         logger.info(
             "Skipping camera sync for %s: village %s is inactive", camera.id, camera.village_id
         )

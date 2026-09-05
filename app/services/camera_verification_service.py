@@ -107,6 +107,7 @@ async def _finalize(
 
         if verified:
             camera.verification_status = CameraVerificationStatus.VERIFIED
+            camera.is_active = True
             camera.ai_vision_synced_at = datetime.now(timezone.utc)
             action = "camera_verified"
             detail = f"camera verified: {camera.name} ({reason})"
@@ -130,6 +131,10 @@ async def _finalize(
         await notification_service.notify_village(db, camera.village_id, action, detail)
         await notification_service.notify_superadmins(db, action, detail)
         await db.commit()
+
+        from app.services import ai_vision_service, mediamtx_service
+        await ai_vision_service.set_camera_active_status(camera.id, False)
+        await mediamtx_service.remove_path(camera.id)
 
         village_id = camera.village_id
         camera_id_value = camera.id

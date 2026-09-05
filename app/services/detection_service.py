@@ -48,6 +48,7 @@ import logging
 from app.core.timezone import BANGKOK_TZ
 from app.core.error_messages import Common, DetectionErrors, CameraErrors
 from app.core.scope_utils import build_scope_filters
+from app.core.scope_utils import build_scope_filters
 
 
 _MAX_ROUTE_TRACKING_RANGE_DAYS = 360
@@ -367,6 +368,10 @@ async def create_detection(
         await db.rollback()
         await _cleanup_written_images(written_paths)
         raise
+    except Exception:
+        await db.rollback()
+        await _cleanup_written_images(written_paths)
+        raise
 
     await db.refresh(car)
 
@@ -458,8 +463,14 @@ async def list_detections(
     result = await db.execute(stmt)
     items = result.scalars().all()
 
+    village_ids = {car.village_id for car in items if car.village_id}
+    village_names = {}
+    if village_ids:
+        group_res = await db.execute(select(Group.id, Group.name).where(Group.id.in_(village_ids)))
+        village_names = {row.id: row.name for row in group_res.all()}
+
     return PaginatedResponse[CarRead](
-        items=[_to_car_read(item, request) for item in items],
+        items=[_to_car_read(item, request, village_names.get(item.village_id)) for item in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -763,6 +774,71 @@ async def get_route_tracking(
         page=page,
         page_size=page_size,
     )
+
+import os
+import time
+from fastapi.concurrency import run_in_threadpool
+from app.core.config import get_settings
+
+async def cleanup_orphaned_images(db: AsyncSession) -> int:
+    settings = get_settings()
+    storage_root = Path(settings.storage_path)
+    if not storage_root.exists():
+        return 0
+
+    now = time.time()
+    
+    def _get_candidate_files() -> dict[uuid.UUID, list[Path]]:
+        candidates = {}
+        for root, dirs, files in os.walk(storage_root):
+            if "avatars" in Path(root).parts:
+                continue
+                
+            for filename in files:
+                parts = filename.split("_")
+                if len(parts) >= 2:
+                    try:
+                        car_id = uuid.UUID(parts[0])
+                    except ValueError:
+                        continue
+                        
+                    file_path = Path(root) / filename
+                    # ลบเฉพาะรูปขยะที่ค้างมาเกิน 1 ชั่วโมง เพื่อไม่ให้กระทบรูปที่กำลังอัปโหลดอยู่
+                    if now - file_path.stat().st_mtime > 3600:
+                        candidates.setdefault(car_id, []).append(file_path)
+        return candidates
+
+    candidates = await run_in_threadpool(_get_candidate_files)
+    if not candidates:
+        return 0
+        
+    candidate_ids = list(candidates.keys())
+    chunk_size = 500
+    valid_ids = set()
+    
+    for i in range(0, len(candidate_ids), chunk_size):
+        chunk = candidate_ids[i:i+chunk_size]
+        result = await db.execute(select(Car.id).where(Car.id.in_(chunk)))
+        valid_ids.update(result.scalars().all())
+        
+    orphaned_ids = set(candidate_ids) - valid_ids
+    deleted_count = 0
+    
+    def _delete_files(ids_to_delete: set[uuid.UUID]) -> int:
+        count = 0
+        for cid in ids_to_delete:
+            for path in candidates[cid]:
+                try:
+                    path.unlink(missing_ok=True)
+                    count += 1
+                except OSError:
+                    pass
+        return count
+        
+    if orphaned_ids:
+        deleted_count = await run_in_threadpool(_delete_files, orphaned_ids)
+        
+    return deleted_count
 
 import os
 import time

@@ -6,6 +6,7 @@ import httpx
 from app.core.config import get_settings
 from app.services import mediamtx_auth_service
 from app.core.alert_cooldown import InMemorySingleWorkerCooldown
+from app.core.alert_cooldown import InMemorySingleWorkerCooldown
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -13,11 +14,20 @@ logger = logging.getLogger(__name__)
 _REQUEST_TIMEOUT_SECONDS = 5.0
 _TRIGGER_PULL_TIMEOUT_SECONDS = 3.0
 
-_client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
+_client: httpx.AsyncClient | None = None
+
+def get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
+    return _client
 
 
 async def close() -> None:
-    await _client.aclose()
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+        _client = None
 
 
 _SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS = 10.0
@@ -25,6 +35,8 @@ _COLD_START_POLL_INTERVAL_SECONDS = 1.0
 _COLD_START_POLL_BUFFER_SECONDS = 2.0
 _COLD_START_MAX_WAIT_SECONDS = _SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS + _COLD_START_POLL_BUFFER_SECONDS
 _BYTES_CONFIRM_WINDOW_SECONDS = 2.0
+_TRIGGER_COOLDOWN_SECONDS = 30.0
+_trigger_cooldown = InMemorySingleWorkerCooldown()
 _TRIGGER_COOLDOWN_SECONDS = 30.0
 _trigger_cooldown = InMemorySingleWorkerCooldown()
 
@@ -47,7 +59,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/replace/{path_name}"
 
     try:
-        response = await _client.post(
+        response = await get_client().post(
             url,
             json={
                 "source": source_rtsp_url,
@@ -63,7 +75,23 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
     if response.status_code == 404:
         add_url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/add/{path_name}"
         try:
-            response = await _client.post(
+            response = await get_client().post(
+                add_url,
+                json={
+                    "source": source_rtsp_url,
+                    "sourceOnDemand": True,
+                    "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+                },
+                auth=_auth(),
+            )
+        except httpx.HTTPError as exc:
+            logger.error("MediaMTX upsert_path (add fallback) request failed for %s: %s", camera_id, exc)
+            return False
+
+    if response.status_code == 404:
+        add_url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/add/{path_name}"
+        try:
+            response = await get_client().post(
                 add_url,
                 json={
                     "source": source_rtsp_url,
@@ -91,7 +119,7 @@ async def remove_path(camera_id: uuid.UUID) -> bool:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/config/paths/delete/{path_name}"
 
     try:
-        response = await _client.delete(url, auth=_auth())
+        response = await get_client().delete(url, auth=_auth())
     except httpx.HTTPError as exc:
         logger.error("MediaMTX remove_path request failed for %s: %s", camera_id, exc)
         return False
@@ -111,7 +139,7 @@ async def _get_path_info(camera_id: uuid.UUID) -> dict | None:
     url = f"{settings.mediamtx_api_url.rstrip('/')}/v3/paths/get/{path_name}"
 
     try:
-        response = await _client.get(url, auth=_auth())
+        response = await get_client().get(url, auth=_auth())
     except httpx.HTTPError as exc:
         logger.warning("MediaMTX get_path_info request failed for %s: %s", camera_id, exc)
         return None
