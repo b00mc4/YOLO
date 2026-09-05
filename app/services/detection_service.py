@@ -55,14 +55,14 @@ _MAX_ROUTE_TRACKING_RANGE_DAYS = 360
 
 logger = logging.getLogger(__name__)
 
-def _to_car_read(car: Car, request: Request) -> CarRead:
+def _to_car_read(car: Car, request: Request, village_name: str | None = None) -> CarRead:
     return CarRead(
         id=car.id,
         event_id=car.event_id,
         camera_id=car.camera_id,
         camera_name=car.camera_name,
         village_id=car.village_id,
-        village_name=car.village_name,
+        village_name=village_name or car.village_name,
         license_plate=car.license_plate,
         province=car.province,
         color=car.color,
