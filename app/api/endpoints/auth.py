@@ -68,6 +68,9 @@ def _clear_refresh_cookie(response: Response) -> None:
         key=auth_service.REFRESH_TOKEN_COOKIE_NAME,
         domain=settings.cookie_domain,
         path=settings.auth_refresh_cookie_path,
+        secure=settings.cookie_secure,
+        httponly=True,
+        samesite=settings.cookie_samesite,
     )
 
 

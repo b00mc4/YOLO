@@ -183,8 +183,16 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     if stored_token is None or stored_token.expired_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
-    result = await db.execute(select(User).where(User.id == stored_token.user_id))
-    user = result.scalar_one_or_none()
+    result = await db.execute(
+        select(User, Group.is_active.label("village_is_active"))
+        .outerjoin(Group, User.village_id == Group.id)
+        .where(User.id == stored_token.user_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        user, village_is_active = None, False
+    else:
+        user, village_is_active = row
 
     if user is None or not user.is_active or not user.is_verify:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
@@ -195,18 +203,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
         await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
-    # Check if this session was kicked out from memory (e.g. max sessions reached)
-    if not session_manager.is_valid_session(user.id, token_hash):
-        await db.delete(stored_token)
-        await db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
-
-    village_is_active = True
-    if user.role != UserRole.SUPERADMIN:
-        village_result = await db.execute(select(Group.is_active).where(Group.id == user.village_id))
-        village_is_active = bool(village_result.scalar_one_or_none())
-
-    if not village_is_active:
+    if user.role != UserRole.SUPERADMIN and not village_is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
     remember_me = stored_token.remember_me

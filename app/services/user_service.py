@@ -207,6 +207,12 @@ async def create_user(
     current_user: User,
     payload: UserCreate,
 ) -> UserRegister:
+    if email_service.is_email_service_degraded():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ไม่สามารถสร้างผู้ใช้ได้ในขณะนี้เนื่องจากระบบอีเมลขัดข้อง",
+        )
+
     if current_user.role == UserRole.ADMIN:
         if payload.role != UserRole.USER:
             raise HTTPException(
@@ -329,8 +335,13 @@ async def get_own_user_detail(db: AsyncSession, request: Request, current_user: 
 
 
 async def get_user_detail(db: AsyncSession, request: Request, current_user: User, user_id: uuid.UUID) -> UserDetail:
-    user = await _get_user_or_404(db, user_id)
-    verify_village_scope(current_user, user.village_id)
+    try:
+        user = await _get_user_or_404(db, user_id)
+        verify_village_scope(current_user, user.village_id)
+    except HTTPException as e:
+        if e.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=UserErrors.NOT_FOUND)
+        raise e
     return await _to_user_detail(db, request, user)
 
 
@@ -341,15 +352,19 @@ async def set_user_active_status(
     user_id: uuid.UUID,
     payload: UserStatusUpdate,
 ) -> UserDetail:
-    target = await _get_user_or_404(db, user_id)
+    try:
+        target = await _get_user_or_404(db, user_id)
+        _verify_user_write_scope(current_user, target)
+    except HTTPException as e:
+        if e.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=UserErrors.NOT_FOUND)
+        raise e
 
     if target.id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="ไม่สามารถเปลี่ยนสถานะบัญชีตัวเองได้",
         )
-
-    _verify_user_write_scope(current_user, target)
 
     previous_is_active = target.is_active
     target.is_active = payload.is_active
@@ -423,6 +438,12 @@ async def resend_invite(
     current_user: User,
     user_id: uuid.UUID,
 ) -> UserDetail:
+    if email_service.is_email_service_degraded():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ไม่สามารถส่งอีเมลเชิญได้ในขณะนี้เนื่องจากระบบอีเมลขัดข้อง",
+        )
+
     target = await _get_user_or_404(db, user_id)
     _verify_user_write_scope(current_user, target)
 
@@ -619,6 +640,12 @@ async def request_email_change(
     user_id: uuid.UUID,
     payload: EmailChangeRequest,
 ) -> None:
+    if email_service.is_email_service_degraded():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ไม่สามารถส่งอีเมลยืนยันการเปลี่ยนอีเมลได้ในขณะนี้เนื่องจากระบบอีเมลขัดข้อง",
+        )
+
     target = await _get_user_or_404(db, user_id)
     _verify_user_write_scope(current_user, target)
 

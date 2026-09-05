@@ -73,7 +73,8 @@ def _build_audit_log_filters(
         filters.append(
             or_(
                 User.role != UserRole.SUPERADMIN,
-                AuditLog.user_id.is_(None)
+                AuditLog.user_id.is_(None),
+                User.id.is_(None)
             )
         )
 

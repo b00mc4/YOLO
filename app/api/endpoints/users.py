@@ -133,7 +133,11 @@ async def get_user_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     file_path, media_type = await user_service.get_user_avatar_path(db, current_user, user_id)
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
 
 
 @router.post(

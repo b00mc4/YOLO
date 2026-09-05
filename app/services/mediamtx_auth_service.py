@@ -15,12 +15,17 @@ _MEDIAMTX_PERMISSIONS_CLAIM = "mediamtx_permissions"
 _READ_ACTION = "read"
 
 
+_PRIVATE_KEY: EllipticCurvePrivateKey | None = None
+
 def _load_private_key() -> EllipticCurvePrivateKey:
-    pem_bytes = base64.b64decode(settings.mediamtx_jwt_private_key_b64)
-    key = serialization.load_pem_private_key(pem_bytes, password=None)
-    if not isinstance(key, EllipticCurvePrivateKey):
-        raise ValueError("mediamtx_jwt_private_key_b64 must decode to an EC private key")
-    return key
+    global _PRIVATE_KEY
+    if _PRIVATE_KEY is None:
+        pem_bytes = base64.b64decode(settings.mediamtx_jwt_private_key_b64)
+        key = serialization.load_pem_private_key(pem_bytes, password=None)
+        if not isinstance(key, EllipticCurvePrivateKey):
+            raise ValueError("mediamtx_jwt_private_key_b64 must decode to an EC private key")
+        _PRIVATE_KEY = key
+    return _PRIVATE_KEY
 
 
 def issue_stream_token(camera_id: uuid.UUID) -> str:
