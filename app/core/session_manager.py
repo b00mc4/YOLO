@@ -1,9 +1,11 @@
-﻿import uuid
+import uuid
 import threading
 from collections import deque
 
+_DEFAULT_MAX_SESSIONS = 5
+
 class SessionManager:
-    def __init__(self, max_sessions: int = 5):
+    def __init__(self, max_sessions: int = _DEFAULT_MAX_SESSIONS):
         self.max_sessions = max_sessions
         self._sessions: dict[uuid.UUID, deque[str]] = {}
         self._lock = threading.Lock()
@@ -40,4 +42,4 @@ class SessionManager:
             if user_id in self._sessions:
                 del self._sessions[user_id]
 
-session_manager = SessionManager(max_sessions=5)
+session_manager = SessionManager(max_sessions=_DEFAULT_MAX_SESSIONS)

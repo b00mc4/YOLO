@@ -138,6 +138,7 @@ async def list_detections(
     is_blacklist: bool | None = Query(default=None),
     is_whitelist: bool | None = Query(default=None),
     direction: CameraDirection | None = Query(default=None),
+    order: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
@@ -158,6 +159,7 @@ async def list_detections(
         is_blacklist=is_blacklist,
         is_whitelist=is_whitelist,
         direction=direction,
+        order=order,
         page=page,
         page_size=page_size,
     )

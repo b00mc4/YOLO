@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import select
 from app.db.session import async_session_maker
 from app.models.group import Group
@@ -21,7 +21,6 @@ async def is_session_still_valid(user_id: uuid.UUID, village_id: uuid.UUID | Non
             return False
             
         if db_password_changed_at is not None and ticket_password_changed_at is not None:
-            from datetime import timezone
             if db_password_changed_at.tzinfo is None:
                 db_password_changed_at = db_password_changed_at.replace(tzinfo=timezone.utc)
             if ticket_password_changed_at.tzinfo is None:

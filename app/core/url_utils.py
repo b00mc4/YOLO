@@ -50,6 +50,7 @@ def redact_rtsp_url(raw: str) -> str:
         if parts.port:
             netloc += f":{parts.port}"
             
-        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        query = "***" if parts.query else ""
+        return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
     except Exception:
         return raw

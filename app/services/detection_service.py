@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from typing import Literal
 from fastapi import BackgroundTasks, HTTPException, Request, UploadFile, status
 from sqlalchemy import case, func, select, tuple_
 from sqlalchemy.exc import IntegrityError
@@ -423,6 +424,7 @@ async def list_detections(
     is_blacklist: bool | None,
     is_whitelist: bool | None,
     direction: CameraDirection | None,
+    order: Literal["asc", "desc"],
     page: int,
     page_size: int,
 ) -> PaginatedResponse[CarRead]:
@@ -450,15 +452,16 @@ async def list_detections(
     if direction is not None:
         stmt = stmt.where(Car.direction == direction)
 
-    count_stmt = stmt.with_only_columns(func.count()).order_by(None)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
     count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
-    stmt = (
-        stmt.order_by(Car.time_detect.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+    if order == "asc":
+        stmt = stmt.order_by(Car.time_detect.asc())
+    else:
+        stmt = stmt.order_by(Car.time_detect.desc())
+
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     result = await db.execute(stmt)
     items = result.scalars().all()
 

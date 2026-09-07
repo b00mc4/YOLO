@@ -14,6 +14,9 @@ from app.models.user import User, UserRole
 from app.models.group import Group
 from app.core.rate_limit import RateLimitExceeded, get_rate_limiter
 from app.core.error_messages import Auth, Common
+from app.core.session_manager import session_manager
+from app.services import audit_service
+from app.core.request_utils import get_client_ip
 
 settings = get_settings()
 
@@ -25,8 +28,6 @@ _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
 _API_KEY_FAILURE_LIMIT = 3
 _API_KEY_FAILURE_WINDOW_SECONDS = 5 * 60
-
-from app.core.session_manager import session_manager
 
 async def get_current_user(
     request: Request,
@@ -126,9 +127,6 @@ def require_roles(*roles: UserRole):
 
     return checker
 
-
-from app.services import audit_service
-from app.core.request_utils import get_client_ip
 
 def verify_village_scope(user: User, target_village_id: uuid.UUID) -> None:
     if user.role == UserRole.SUPERADMIN:

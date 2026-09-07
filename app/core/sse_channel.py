@@ -57,7 +57,7 @@ class SSEChannel:
         self._limiter = InMemoryConnectionLimiter()
         self._subscribers: dict[uuid.UUID, set[asyncio.Queue]] = defaultdict(set)
         self._global_subscribers: set[asyncio.Queue] = set()
-        self._tickets: OrderedDict[str, tuple[uuid.UUID, uuid.UUID | None, datetime]] = OrderedDict()
+        self._tickets: OrderedDict[str, tuple[uuid.UUID, uuid.UUID | None, datetime, datetime | None]] = OrderedDict()
         self._last_sweep_at = monotonic()
 
     def _sweep_expired_tickets(self) -> None:

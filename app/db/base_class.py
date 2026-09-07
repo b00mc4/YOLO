@@ -1,5 +1,5 @@
 from sqlalchemy import MetaData
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import DeclarativeBase
 
 _NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -9,4 +9,5 @@ _NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
-Base = declarative_base(metadata=MetaData(naming_convention=_NAMING_CONVENTION))
+class Base(DeclarativeBase):
+    metadata = MetaData(naming_convention=_NAMING_CONVENTION)

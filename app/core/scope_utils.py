@@ -25,7 +25,7 @@ async def resolve_village_id(
         if village is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Village not found",
+                detail="ไม่พบข้อมูลหมู่บ้านที่ระบุ",
             )
         if not village.is_active:
             raise HTTPException(

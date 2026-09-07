@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from fastapi import Request
+from fastapi import Request, HTTPException, status
 from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
@@ -10,6 +10,7 @@ from app.models.user import User, UserRole
 from app.schemas.audit_log import AuditLogRead
 from app.schemas.common import PaginatedResponse
 from app.core.request_utils import get_client_ip
+from app.core.error_messages import Common
 
 
 _DETAIL_MAX_LENGTH = 1000
@@ -69,6 +70,11 @@ def _build_audit_log_filters(
         if village_id_filter is not None:
             filters.append(AuditLog.village_id == village_id_filter)
     else:
+        if village_id_filter is not None and village_id_filter != current_user.village_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=Common.VILLAGE_ID_NOT_ALLOWED_FOR_ROLE,
+            )
         filters.append(AuditLog.village_id == current_user.village_id)
         filters.append(
             or_(

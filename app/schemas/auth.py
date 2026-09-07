@@ -49,7 +49,7 @@ class VerifyTokenRequest(BaseModel):
 class SessionInfo(BaseModel):
     id: uuid.UUID
     created_at: datetime
-    expired_at: datetime
+    expire_at: datetime
     is_current: bool = False
 
 class ActiveSessionsResponse(BaseModel):

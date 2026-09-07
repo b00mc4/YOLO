@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.models.camera import CameraDirection, CameraVerificationStatus
 from app.core.url_utils import normalize_rtsp_url, redact_rtsp_url
 
-_NO_EMOJI_REGEX = re.compile(r"^[\u0E00-\u0E7F\x20-\x7E]+$")
+from app.core.regex_patterns import _NO_EMOJI_REGEX
 
 def _validate_coordinate(v: Any, max_len: int, min_val: float, max_val: float) -> float:
     if v is None:
@@ -134,6 +134,7 @@ class CameraBasicRead(BaseModel):
 
 
 class CameraStatusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     is_active: bool
     verification_status: CameraVerificationStatus
@@ -149,6 +150,7 @@ class CameraResyncFailedEntry(BaseModel):
 
 
 class CameraResyncAllRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     total: int
     succeeded: int
     failed: int
@@ -156,6 +158,7 @@ class CameraResyncAllRead(BaseModel):
 
 
 class CameraVerificationCheckRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     verification_status: CameraVerificationStatus
     is_active: bool
@@ -174,6 +177,7 @@ class OnvifProbeRequest(BaseModel):
 
 
 class OnvifProfileRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     profile_token: str
     name: str
     encoding: str | None
@@ -189,6 +193,7 @@ class OnvifProbeResponse(BaseModel):
 
 
 class CameraStreamTokenRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     camera_id: uuid.UUID
     stream_url: str
     expires_at: datetime

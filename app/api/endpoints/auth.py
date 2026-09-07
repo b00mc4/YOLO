@@ -22,6 +22,7 @@ from app.schemas.common import MessageResponse
 from app.services import auth_service
 from app.api.deps import get_current_user, rate_limit_by_ip
 from app.core.error_messages import Auth
+from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
 
 _VERIFY_SET_PASSWORD_TOKEN_IP_LIMIT = 20
 _VERIFY_SET_PASSWORD_TOKEN_IP_WINDOW_SECONDS = 10 * 60
@@ -141,7 +142,6 @@ async def forgot_password(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
     rate_limiter = get_rate_limiter()
     
     normalized_email = payload.email.strip().lower()
@@ -196,7 +196,7 @@ async def set_password(
     """ต่อจาก endpoint forgot-password เอา token url มาใส่ในนี้ user สามารถตั้งรหัสผ่านเองได้"""
     username = await auth_service.set_password(db, payload.token, payload.new_password)
     return SetPasswordResponse(
-        detail=f"ยินดีด้วย คุณสมัครสำเร็จ สามารถเข้าสู่ระบบได้เลยโดยใช้ username: {username}",
+        detail=f"ตั้งรหัสผ่านสำเร็จ สามารถเข้าสู่ระบบได้เลยโดยใช้ username: {username}",
         username=username,
     )
 

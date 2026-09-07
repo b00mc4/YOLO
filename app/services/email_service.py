@@ -140,6 +140,8 @@ async def send_bulk_plain_email(
     text_body: str,
     html_body: str,
 ) -> list[str]:
+    if not to_emails:
+        return []
     smtp = aiosmtplib.SMTP(hostname=settings.smtp_host, port=settings.smtp_port)
     try:
         await smtp.connect()

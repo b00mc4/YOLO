@@ -159,7 +159,7 @@ async def issue_tokens(db: AsyncSession, user: User, remember_me: bool):
     refresh_token = RefreshToken(
         user_id=user.id,
         token_hash=token_hash,
-        expired_at=datetime.now(timezone.utc) + expires_delta,
+        expire_at=datetime.now(timezone.utc) + expires_delta,
         remember_me=remember_me,
     )
     db.add(refresh_token)
@@ -180,7 +180,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
     )
     stored_token = result.scalar_one_or_none()
 
-    if stored_token is None or stored_token.expired_at < datetime.now(timezone.utc):
+    if stored_token is None or stored_token.expire_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=Auth.INVALID_OR_EXPIRED_REFRESH_TOKEN)
 
     result = await db.execute(
@@ -214,8 +214,25 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
 
 async def revoke_refresh_token(db: AsyncSession, raw_refresh_token: str):
     token_hash = hash_token(raw_refresh_token)
+    
+    result = await db.execute(select(RefreshToken.user_id).where(RefreshToken.token_hash == token_hash))
+    user_id = result.scalar_one_or_none()
+    
+    village_id = None
+    if user_id:
+        user_res = await db.execute(select(User.village_id).where(User.id == user_id))
+        village_id = user_res.scalar_one_or_none()
+
     session_manager.remove_session_by_id(token_hash)
     await db.execute(delete(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    await audit_service.log_action(
+        db,
+        request=None,
+        action="logout",
+        detail="user logged out and refresh token revoked",
+        user_id=user_id,
+        village_id=village_id,
+    )
     await db.commit()
 
 async def revoke_all_refresh_tokens(db: AsyncSession, user_id: uuid.UUID):
@@ -309,6 +326,14 @@ async def request_password_reset(
     await invalidate_pending_verify_tokens(
         db, user.id, VerifyType.PASSWORD_RESET, exclude_token_hash=hash_token(raw_token)
     )
+    await audit_service.log_action(
+        db,
+        request=None,
+        action="password_reset_requested",
+        detail=f"password reset requested for email: {email}",
+        user_id=user.id,
+        village_id=user.village_id,
+    )
     await db.commit()
     background_tasks.add_task(
         email_service.send_set_password_email_background, user.email, raw_token
@@ -361,6 +386,14 @@ async def set_password(db: AsyncSession, raw_token: str, new_password: str) -> s
         db, user.id, verify_entry.type, exclude_token_hash=token_hash
     )
     await revoke_all_refresh_tokens(db, user.id)
+    await audit_service.log_action(
+        db,
+        request=None,
+        action="password_set",
+        detail=f"password successfully set for username: {user.username}",
+        user_id=user.id,
+        village_id=user.village_id,
+    )
     await db.commit()
 
     return user.username
@@ -423,7 +456,7 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == current_user.id,
-            RefreshToken.expired_at > datetime.now(timezone.utc)
+            RefreshToken.expire_at > datetime.now(timezone.utc)
         ).order_by(RefreshToken.created_at.desc())
     )
     tokens = result.scalars().all()
@@ -439,7 +472,7 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
                 SessionInfo(
                     id=token.id,
                     created_at=token.created_at,
-                    expired_at=token.expired_at,
+                    expire_at=token.expire_at,
                     is_current=(token.token_hash == current_token_hash)
                 )
             )
@@ -451,13 +484,13 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
     )
 
 async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
-    stmt = delete(RefreshToken).where(RefreshToken.expired_at < datetime.now(timezone.utc))
+    stmt = delete(RefreshToken).where(RefreshToken.expire_at < datetime.now(timezone.utc))
     result = await db.execute(stmt)
     await db.commit()
     return result.rowcount
 
 async def restore_active_sessions(db: AsyncSession) -> int:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -467,7 +500,7 @@ async def restore_active_sessions(db: AsyncSession) -> int:
     return count
 
 async def restore_active_sessions(db: AsyncSession) -> None:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -483,7 +516,7 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.user_id == current_user.id,
-            RefreshToken.expired_at > datetime.now(timezone.utc)
+            RefreshToken.expire_at > datetime.now(timezone.utc)
         ).order_by(RefreshToken.created_at.desc())
     )
     tokens = result.scalars().all()
@@ -499,7 +532,7 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
                 SessionInfo(
                     id=token.id,
                     created_at=token.created_at,
-                    expired_at=token.expired_at,
+                    expire_at=token.expire_at,
                     is_current=(token.token_hash == current_token_hash)
                 )
             )
@@ -511,13 +544,13 @@ async def get_active_sessions(db: AsyncSession, request: Request, current_user: 
     )
 
 async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
-    stmt = delete(RefreshToken).where(RefreshToken.expired_at < datetime.now(timezone.utc))
+    stmt = delete(RefreshToken).where(RefreshToken.expire_at < datetime.now(timezone.utc))
     result = await db.execute(stmt)
     await db.commit()
     return result.rowcount
 
 async def restore_active_sessions(db: AsyncSession) -> int:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -527,7 +560,7 @@ async def restore_active_sessions(db: AsyncSession) -> int:
     return count
 
 async def restore_active_sessions(db: AsyncSession) -> None:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -537,13 +570,13 @@ async def restore_active_sessions(db: AsyncSession) -> None:
     return count
 
 async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
-    stmt = delete(RefreshToken).where(RefreshToken.expired_at < datetime.now(timezone.utc))
+    stmt = delete(RefreshToken).where(RefreshToken.expire_at < datetime.now(timezone.utc))
     result = await db.execute(stmt)
     await db.commit()
     return result.rowcount
 
 async def restore_active_sessions(db: AsyncSession) -> int:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -553,7 +586,7 @@ async def restore_active_sessions(db: AsyncSession) -> int:
     return count
 
 async def restore_active_sessions(db: AsyncSession) -> None:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0
@@ -563,7 +596,7 @@ async def restore_active_sessions(db: AsyncSession) -> None:
     return count
 
 async def restore_active_sessions(db: AsyncSession) -> int:
-    stmt = select(RefreshToken).where(RefreshToken.expired_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
+    stmt = select(RefreshToken).where(RefreshToken.expire_at > datetime.now(timezone.utc)).order_by(RefreshToken.created_at.asc())
     result = await db.execute(stmt)
     tokens = result.scalars().all()
     count = 0

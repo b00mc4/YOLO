@@ -8,7 +8,7 @@ from app.models.user import UserRole
 from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import ContactErrors
 
-_THAI_ENG_PATTERN = re.compile(r"^[\u0020-\u007E\u0E00-\u0E7F]+$")
+from app.core.regex_patterns import _THAI_ENG_PATTERN
 
 def _normalize_content_type(value):
     if isinstance(value, str):

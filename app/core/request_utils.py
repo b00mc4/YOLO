@@ -10,4 +10,4 @@ def get_client_ip(request: Request) -> str:
             hops = [hop.strip() for hop in forwarded_for.split(",")]
             if len(hops) >= settings.trusted_proxy_hops:
                 return hops[-settings.trusted_proxy_hops]
-    return request.client.host if request.client else ""
+    return request.client.host if request.client and request.client.host else "unknown"

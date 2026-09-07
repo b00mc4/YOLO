@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.schemas.car import RepeatedPlateEntry
 
 
@@ -22,10 +22,12 @@ class ReportMetrics(BaseModel):
 
 
 class ReportSummaryRead(ReportMetrics):
+    model_config = ConfigDict(from_attributes=True)
     days: int
     date_from: date
     date_to: date
 
 
 class ReportDailyRead(ReportMetrics):
+    model_config = ConfigDict(from_attributes=True)
     date: date

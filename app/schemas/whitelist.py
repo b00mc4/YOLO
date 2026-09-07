@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-_THAI_PLATE_PATTERN = re.compile(r"^[ก-ฮะ-์เ-ไ0-9\s]+$")
+from app.core.regex_patterns import _THAI_PLATE_PATTERN
 
 
 from app.core.plate_format import PlateString, ProvinceString

@@ -2,7 +2,7 @@ import re
 from typing import Annotated
 from pydantic import AfterValidator, BeforeValidator
 
-_THAI_PLATE_PATTERN = re.compile(r"^[ก-ฮะ-์เ-ไ0-9\s]+$")
+from app.core.regex_patterns import _THAI_PLATE_PATTERN
 
 def _normalize_string(v: str) -> str:
     return v.strip().upper()

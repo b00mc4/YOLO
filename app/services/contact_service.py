@@ -25,7 +25,7 @@ from app.core.db_utils import escape_like
 
 from app.core.config import get_settings
 settings = get_settings()
-_THAI_ENG_PATTERN = re.compile(r"^[\u0020-\u007E\u0E00-\u0E7F]+$")
+from app.core.regex_patterns import _THAI_ENG_PATTERN
 
 async def _get_user_or_404(db: AsyncSession, user_id: uuid.UUID) -> User:
     result = await db.execute(select(User).where(User.id == user_id))

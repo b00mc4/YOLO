@@ -61,6 +61,7 @@ class CameraSummary(BaseModel):
 
 
 class CarDetailRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     event_id: uuid.UUID
     license_plate: str
@@ -82,6 +83,7 @@ class RepeatedPlateEntry(BaseModel):
 
 
 class DetectionDashboardRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     date: date
     total_detections_today: int
     unique_plates_today: int
@@ -157,6 +159,7 @@ class RouteTrackingDayEntry(BaseModel):
 
 
 class RouteTrackingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     items: list[RouteTrackingDayEntry]
     total_dates: int
     total_detections: int

@@ -13,6 +13,7 @@ from app.services import ai_vision_service, auth_service, camera_service, camera
 
 _NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 _AUTH_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
+_IMAGE_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.startup_clean_auth_task = clean_auth_task
 
     clean_image_task = asyncio.create_task(
-        _run_cleanup_loop("Image", 86400, detection_service.cleanup_orphaned_images)
+        _run_cleanup_loop("Image", _IMAGE_CLEANUP_INTERVAL_SECONDS, detection_service.cleanup_orphaned_images)
     )
     app.state.startup_clean_image_task = clean_image_task
 
