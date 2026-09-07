@@ -49,6 +49,7 @@ from app.core.timezone import BANGKOK_TZ
 from app.core.error_messages import Common, DetectionErrors, CameraErrors
 from app.core.scope_utils import build_scope_filters
 from app.core.scope_utils import build_scope_filters
+from app.core.db_utils import escape_like
 
 
 _MAX_ROUTE_TRACKING_RANGE_DAYS = 360
@@ -286,11 +287,9 @@ async def create_detection(
         extension=full_extension,
     )
 
-    is_blacklist = await _check_is_blacklisted(
-        db, camera.village_id, payload.license_plate, payload.province
-    )
-    is_whitelist = await _check_is_whitelisted(
-        db, camera.village_id, payload.license_plate, payload.province
+    is_blacklist, is_whitelist = await asyncio.gather(
+        _check_is_blacklisted(db, camera.village_id, payload.license_plate, payload.province),
+        _check_is_whitelisted(db, camera.village_id, payload.license_plate, payload.province)
     )
 
     written_paths: list[str] = []
@@ -431,15 +430,15 @@ async def list_detections(
     stmt = select(Car).where(*scope_filters)
 
     if village_name is not None:
-        stmt = stmt.where(Car.village_name.ilike(f"%{village_name}%"))
+        stmt = stmt.where(Car.village_name.ilike(f"%{escape_like(village_name)}%", escape="\\"))
     if camera_id is not None:
         stmt = stmt.where(Car.camera_id == camera_id)
     if license_plate is not None:
-        stmt = stmt.where(Car.license_plate.ilike(f"%{license_plate}%"))
+        stmt = stmt.where(Car.license_plate.ilike(f"%{escape_like(license_plate)}%", escape="\\"))
     if province is not None:
         stmt = stmt.where(Car.province == province)
     if color is not None:
-        stmt = stmt.where(Car.color.ilike(f"%{color}%"))
+        stmt = stmt.where(Car.color.ilike(f"%{escape_like(color)}%", escape="\\"))
     if time_detect_from is not None:
         stmt = stmt.where(Car.time_detect >= time_detect_from)
     if time_detect_to is not None:

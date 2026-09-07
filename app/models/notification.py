@@ -17,6 +17,7 @@ class Notification(Base):
             "is_read",
             "created_at",
         ),
+        Index("ix_notificationtable_user_created", "user_id", "created_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

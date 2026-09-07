@@ -21,6 +21,7 @@ from app.schemas.contact import (
 from app.services import audit_service
 from app.core.contact_format import normalize_and_validate_contact_value
 from app.core.error_messages import Common, ContactErrors, UserErrors
+from app.core.db_utils import escape_like
 
 from app.core.config import get_settings
 settings = get_settings()
@@ -266,8 +267,8 @@ async def list_contact_directory(
         count_stmt = count_stmt.where(scope_filter)
 
     if search:
-        pattern = f"%{search}%"
-        search_filter = or_(User.fullname.ilike(pattern), User.username.ilike(pattern))
+        pattern = f"%{escape_like(search)}%"
+        search_filter = or_(User.fullname.ilike(pattern, escape="\\"), User.username.ilike(pattern, escape="\\"))
         stmt = stmt.where(search_filter)
         count_stmt = count_stmt.where(search_filter)
 
@@ -311,6 +312,9 @@ async def update_contact(
 
     update_data = payload.model_dump(exclude_unset=True)
     merged_content_type = update_data.get("content_type", contact.content_type)
+
+    if merged_content_type != ContactType.OTHER and "custom_label" not in update_data:
+        update_data["custom_label"] = None
 
     if "content_type" in update_data:
         await _check_duplicate_content_type(

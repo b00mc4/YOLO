@@ -14,6 +14,7 @@ from app.schemas.common import PaginatedResponse
 from app.schemas.village import VillageCreate, VillageDetailRead, VillageMemberSummary, VillageUpdate
 from app.services import audit_service, camera_service
 from app.core.error_messages import Common, VillageErrors
+from app.core.db_utils import escape_like
 
 async def create_village(
     db: AsyncSession,
@@ -104,8 +105,8 @@ async def list_villages(
         count_stmt = count_stmt.where(Group.is_active == is_active_filter)
 
     if search:
-        stmt = stmt.where(Group.name.ilike(f"%{search}%"))
-        count_stmt = count_stmt.where(Group.name.ilike(f"%{search}%"))
+        stmt = stmt.where(Group.name.ilike(f"%{escape_like(search)}%", escape="\\"))
+        count_stmt = count_stmt.where(Group.name.ilike(f"%{escape_like(search)}%", escape="\\"))
 
     total_result = await db.execute(count_stmt)
     total = total_result.scalar_one()

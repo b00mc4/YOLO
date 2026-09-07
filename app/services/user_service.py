@@ -31,6 +31,7 @@ from app.schemas.user import (
 from app.services import audit_service, auth_service, email_service, storage_service, village_service
 from app.models.group import Group
 from app.core.error_messages import Auth, AvatarErrors, Common, UserErrors
+from app.core.db_utils import escape_like
 from app.core.rate_limit import get_rate_limiter, password_reauth_key, PASSWORD_REAUTH_LIMIT, PASSWORD_REAUTH_WINDOW_SECONDS
 
 _RESEND_INVITE_COOLDOWN = timedelta(minutes=1)
@@ -137,8 +138,8 @@ def _build_user_list_filters(
     if is_active_filter is not None:
         filters.append(User.is_active == is_active_filter)
     if search:
-        pattern = f"%{search}%"
-        filters.append(or_(User.fullname.ilike(pattern), User.username.ilike(pattern)))
+        pattern = f"%{escape_like(search)}%"
+        filters.append(or_(User.fullname.ilike(pattern, escape="\\"), User.username.ilike(pattern, escape="\\")))
 
     return filters
 

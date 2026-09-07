@@ -14,6 +14,7 @@ from app.core.error_messages import Common, WhitelistErrors, Auth, Auth
 
 
 from app.core.scope_utils import resolve_village_id, build_scope_filters
+from app.core.db_utils import escape_like
 
 async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Whitelist:
     result = await db.execute(select(Whitelist).where(Whitelist.id == entry_id))
@@ -113,11 +114,11 @@ async def list_whitelist_entries(
     stmt = select(Whitelist).where(*scope_filters)
 
     if name is not None:
-        stmt = stmt.where(Whitelist.name.ilike(f"%{name}%"))
+        stmt = stmt.where(Whitelist.name.ilike(f"%{escape_like(name)}%", escape="\\"))
     if house_no is not None:
-        stmt = stmt.where(Whitelist.house_no.ilike(f"%{house_no}%"))
+        stmt = stmt.where(Whitelist.house_no.ilike(f"%{escape_like(house_no)}%", escape="\\"))
     if license_plate is not None:
-        stmt = stmt.where(Whitelist.license_plate.ilike(f"%{license_plate}%"))
+        stmt = stmt.where(Whitelist.license_plate.ilike(f"%{escape_like(license_plate)}%", escape="\\"))
     if province is not None:
         stmt = stmt.where(Whitelist.province == province)
 

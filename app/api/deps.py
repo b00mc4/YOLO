@@ -3,7 +3,7 @@ from datetime import timezone
 import secrets
 import uuid
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, status, Query
 from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from app.core.error_messages import Auth, Common
 settings = get_settings()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 api_key_scheme = APIKeyHeader(name=settings.api_key_header_name, auto_error=False)
 
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
@@ -98,6 +99,21 @@ async def get_current_user(
 
     request.state.user = user
     return user
+
+async def get_current_user_from_query(
+    request: Request,
+    token: str | None = Query(None),
+    header_token: str | None = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+):
+    actual_token = token or header_token
+    if not actual_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=Auth.COULD_NOT_VALIDATE_CREDENTIALS,
+            headers=_UNAUTHORIZED_HEADERS,
+        )
+    return await get_current_user(request, token=actual_token, db=db)
 
 def require_roles(*roles: UserRole):
     async def checker(user: User = Depends(get_current_user)):

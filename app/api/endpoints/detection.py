@@ -7,7 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import get_current_user, verify_api_key
+from app.api.deps import get_current_user, verify_api_key, get_current_user_from_query
 from app.db.session import get_db
 from app.models.camera import CameraDirection
 from app.models.user import User
@@ -216,7 +216,7 @@ async def get_detection_detail(
 async def get_detection_image(
     detection_id: uuid.UUID,
     variant: Literal["crop", "full"],
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_from_query),
     db: AsyncSession = Depends(get_db),
 ):
     file_path, media_type = await detection_service.get_detection_image_path(

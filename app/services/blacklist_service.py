@@ -25,6 +25,7 @@ settings = get_settings()
 
 
 from app.core.scope_utils import resolve_village_id, build_scope_filters
+from app.core.db_utils import escape_like
 
 async def _get_entry_or_404(db: AsyncSession, entry_id: uuid.UUID) -> Blacklist:
     result = await db.execute(select(Blacklist).where(Blacklist.id == entry_id))
@@ -121,7 +122,7 @@ async def list_blacklist_entries(
     stmt = select(Blacklist).where(*scope_filters)
 
     if license_plate is not None:
-        stmt = stmt.where(Blacklist.license_plate.ilike(f"%{license_plate}%"))
+        stmt = stmt.where(Blacklist.license_plate.ilike(f"%{escape_like(license_plate)}%", escape="\\"))
     if province is not None:
         stmt = stmt.where(Blacklist.province == province)
 
@@ -197,8 +198,8 @@ async def delete_blacklist_entry(
     await db.commit()
 
 
-def _cooldown_key(camera_id: uuid.UUID, license_plate: str, province: str) -> str:
-    return f"blacklist_email:{camera_id}:{license_plate}:{province}"
+def _cooldown_key(village_id: uuid.UUID, license_plate: str, province: str) -> str:
+    return f"blacklist_email:{village_id}:{license_plate}:{province}"
 
 
 async def _log_skip(
@@ -238,7 +239,7 @@ async def handle_blacklist_detection(
         return
 
     if not get_alert_cooldown().allow(
-        _cooldown_key(camera_id, license_plate, province), settings.blacklist_email_alert_cooldown_seconds
+        _cooldown_key(village_id, license_plate, province), settings.blacklist_email_alert_cooldown_seconds
     ):
         return
 
