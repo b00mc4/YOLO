@@ -224,4 +224,8 @@ async def get_detection_image(
     file_path, media_type = await detection_service.get_detection_image_path(
         db, current_user, detection_id, variant
     )
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=31536000"}
+    )

@@ -543,19 +543,10 @@ async def get_today_dashboard(
     scope_filters = build_scope_filters(current_user, village_id, Car)
     base_filters = [Car.time_detect >= start_utc, Car.time_detect < end_utc, *scope_filters]
 
-    # --- single aggregated counts query (replaces 6 separate queries) ---
-    unique_plates_sub = (
-        select(func.count())
-        .select_from(
-            select(Car.license_plate, Car.province)
-            .where(*base_filters)
-            .distinct()
-            .subquery()
-        )
-    )
     agg_query = (
         select(
             func.count().label("total"),
+            func.count(func.distinct(tuple_(Car.license_plate, Car.province))).label("unique_plates"),
             func.count(case((Car.is_blacklist.is_(True), 1))).label("blacklist"),
             func.count(case((Car.is_whitelist.is_(True), 1))).label("whitelist"),
             func.count(case((Car.direction == CameraDirection.ENTRY, 1))).label("entry"),
@@ -582,14 +573,12 @@ async def get_today_dashboard(
         .limit(latest_limit)
     )
 
-    # --- execute 4 queries sequentially to prevent MissingGreenlet ---
     agg_result = await db.execute(agg_query)
-    unique_result = await db.execute(unique_plates_sub)
     top_repeated_result = await db.execute(top_repeated_query)
     latest_result = await db.execute(latest_query)
 
     row = agg_result.one()
-    unique_plates_today = unique_result.scalar_one()
+    unique_plates_today = row.unique_plates
 
     top_repeated_plates = [
         RepeatedPlateEntry(license_plate=plate, province=province, count=count)

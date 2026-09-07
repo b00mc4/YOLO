@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+import time
 import uuid
 import httpx
 from app.core.config import get_settings
@@ -11,7 +12,7 @@ from app.core.alert_cooldown import InMemorySingleWorkerCooldown
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
-_REQUEST_TIMEOUT_SECONDS = 5.0
+_REQUEST_TIMEOUT_SECONDS = 1.5
 _TRIGGER_PULL_TIMEOUT_SECONDS = 3.0
 
 _client: httpx.AsyncClient | None = None
@@ -65,6 +66,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
                 "source": source_rtsp_url,
                 "sourceOnDemand": True,
                 "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+                "sourceProtocol": "tcp",
             },
             auth=_auth(),
         )
@@ -81,6 +83,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
                     "source": source_rtsp_url,
                     "sourceOnDemand": True,
                     "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+                    "sourceProtocol": "tcp",
                 },
                 auth=_auth(),
             )
@@ -97,6 +100,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
                     "source": source_rtsp_url,
                     "sourceOnDemand": True,
                     "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
+                    "sourceProtocol": "tcp",
                 },
                 auth=_auth(),
             )
@@ -197,17 +201,36 @@ async def _confirm_bytes_flowing(camera_id: uuid.UUID, baseline_bytes: int) -> b
     return info["bytes_received"] > baseline_bytes
 
 
+_ALIVE_CACHE: dict[str, dict] = {}
+_ALIVE_CACHE_TTL = 3.0
+
 async def check_source_alive(camera_id: uuid.UUID) -> tuple[bool, bool]:
+    cid_str = str(camera_id)
+    now = time.time()
+
+    if cid_str in _ALIVE_CACHE:
+        entry = _ALIVE_CACHE[cid_str]
+        if now - entry["time"] < _ALIVE_CACHE_TTL:
+            return entry["data"]
+
+    # Clear stale cache occasionally
+    if len(_ALIVE_CACHE) > 1000:
+        stale = [k for k, v in _ALIVE_CACHE.items() if now - v["time"] > _ALIVE_CACHE_TTL]
+        for k in stale:
+            _ALIVE_CACHE.pop(k, None)
+
     baseline = await _get_path_info(camera_id)
 
+    result = False, False
     if baseline is None or not baseline.get("exists"):
-        return False, False
+        result = False, False
+    elif baseline["ready"]:
+        result = True, False
+    else:
+        if _trigger_cooldown.allow(cid_str, cooldown_seconds=_TRIGGER_COOLDOWN_SECONDS):
+            logger.info("Triggering MediaMTX on-demand pull for camera_id=%s in background", camera_id)
+            asyncio.create_task(_trigger_on_demand_pull(camera_id))
+        result = False, True
 
-    if baseline["ready"]:
-        return True, False
-
-    if _trigger_cooldown.allow(str(camera_id), cooldown_seconds=_TRIGGER_COOLDOWN_SECONDS):
-        logger.info("Triggering MediaMTX on-demand pull for camera_id=%s in background", camera_id)
-        asyncio.create_task(_trigger_on_demand_pull(camera_id))
-
-    return False, True
+    _ALIVE_CACHE[cid_str] = {"time": time.time(), "data": result}
+    return result

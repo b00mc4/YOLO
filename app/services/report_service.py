@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException, status
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.camera import CameraDirection
 from app.models.car import Car
@@ -64,19 +64,10 @@ def _build_report_scope_filters(current_user: User, village_id_filter: uuid.UUID
 
 
 async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
-    # --- single aggregated counts query (replaces 6 separate queries) ---
-    unique_plates_sub = (
-        select(func.count())
-        .select_from(
-            select(Car.license_plate, Car.province)
-            .where(*base_filters)
-            .distinct()
-            .subquery()
-        )
-    )
     agg_query = (
         select(
             func.count().label("total"),
+            func.count(func.distinct(tuple_(Car.license_plate, Car.province))).label("unique_plates"),
             func.count(case((Car.is_blacklist.is_(True), 1))).label("blacklist"),
             func.count(case((Car.is_whitelist.is_(True), 1))).label("whitelist"),
             func.count(case((Car.direction == CameraDirection.ENTRY, 1))).label("entry"),
@@ -105,9 +96,7 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
         .group_by(bangkok_hour)
     )
 
-    # --- execute 4 queries sequentially to prevent MissingGreenlet ---
     agg_result = await db.execute(agg_query)
-    unique_result = await db.execute(unique_plates_sub)
     top_repeated_result = await db.execute(top_repeated_query)
     hourly_result = await db.execute(hourly_query)
 
@@ -126,7 +115,7 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
 
     return {
         "total_detections": row.total,
-        "unique_plates": unique_result.scalar_one(),
+        "unique_plates": row.unique_plates,
         "blacklist_detections": row.blacklist,
         "whitelist_detections": row.whitelist,
         "entry_detections": row.entry,

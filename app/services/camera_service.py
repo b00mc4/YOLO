@@ -288,8 +288,7 @@ async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uui
         status = False
         details.append("Stream is offline")
     elif is_starting:
-        status = False
-        details.append("Stream is starting")
+        details.append("Stream is on standby")
 
     return CameraStatusRead(
         id=camera.id,
