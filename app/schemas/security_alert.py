@@ -14,3 +14,16 @@ class LoginBruteforceAlertPayload(BaseModel):
 
 class LoginBruteforceAlertPayloadGlobal(LoginBruteforceAlertPayload):
     village_id: uuid.UUID | None
+
+
+class RapidLoginAlertPayload(BaseModel):
+    username: str
+    user_id: uuid.UUID
+    ip_address: str
+    count: int
+    window_seconds: int
+    occurred_at: datetime
+
+
+class RapidLoginAlertPayloadGlobal(RapidLoginAlertPayload):
+    village_id: uuid.UUID | None

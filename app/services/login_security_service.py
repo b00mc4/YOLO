@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
-from app.schemas.security_alert import LoginBruteforceAlertPayload, LoginBruteforceAlertPayloadGlobal
+from app.schemas.security_alert import (
+    LoginBruteforceAlertPayload,
+    LoginBruteforceAlertPayloadGlobal,
+    RapidLoginAlertPayload,
+    RapidLoginAlertPayloadGlobal,
+)
 from app.services import audit_service, channel_service, notification_service
 from app.db.session import async_session_maker
 
@@ -75,5 +80,60 @@ async def publish_bruteforce_alert(
     )
     await channel_service.security_alerts.publish_global(
         "login_bruteforce_detected",
+        global_payload.model_dump(mode="json"),
+    )
+
+
+async def publish_rapid_login_alert(
+    user: User,
+    ip_address: str,
+    count: int,
+    window_seconds: int,
+) -> None:
+    occurred_at = datetime.now(timezone.utc)
+    detail = f"Rapid login detected for user {user.username}: {count} times within {window_seconds} seconds"
+
+    async with async_session_maker() as db:
+        await audit_service.log_action(
+            db,
+            request=None,
+            action="rapid_login_detected",
+            detail=detail,
+            user_id=user.id,
+            village_id=user.village_id,
+        )
+        if user.village_id is not None:
+            await notification_service.notify_village(
+                db, user.village_id, "rapid_login_detected", detail, roles=(UserRole.ADMIN,)
+            )
+        await notification_service.notify_superadmins(db, "rapid_login_detected", detail)
+        await db.commit()
+
+    if user.village_id is not None:
+        village_payload = RapidLoginAlertPayload(
+            username=user.username,
+            user_id=user.id,
+            ip_address=ip_address,
+            count=count,
+            window_seconds=window_seconds,
+            occurred_at=occurred_at,
+        )
+        await channel_service.security_alerts.publish(
+            user.village_id,
+            "rapid_login_detected",
+            village_payload.model_dump(mode="json"),
+        )
+
+    global_payload = RapidLoginAlertPayloadGlobal(
+        username=user.username,
+        user_id=user.id,
+        ip_address=ip_address,
+        count=count,
+        window_seconds=window_seconds,
+        occurred_at=occurred_at,
+        village_id=user.village_id,
+    )
+    await channel_service.security_alerts.publish_global(
+        "rapid_login_detected",
         global_payload.model_dump(mode="json"),
     )

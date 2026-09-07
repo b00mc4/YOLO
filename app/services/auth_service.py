@@ -23,6 +23,16 @@ from app.core.rate_limit import get_rate_limiter, password_reauth_key, PASSWORD_
 from app.core.account_lockout import AccountLocked, get_account_locker
 from app.core.error_messages import Auth, UserErrors
 
+import asyncio
+from app.core.rate_limit import InMemorySingleWorkerRateLimiter, RateLimitExceeded
+from app.core.alert_cooldown import InMemorySingleWorkerCooldown
+
+_rapid_login_limiter = InMemorySingleWorkerRateLimiter()
+_rapid_login_alert_cooldown = InMemorySingleWorkerCooldown()
+
+_RAPID_LOGIN_LIMIT = 5
+_RAPID_LOGIN_WINDOW_SECONDS = 60
+
 settings = get_settings()
 
 REFRESH_TOKEN_COOKIE_NAME = "refresh_token"
@@ -142,6 +152,17 @@ async def authenticate_user(db: AsyncSession, request: Request, username: str, p
     )
     await db.commit()
     get_rate_limiter().reset(rate_limit_key)
+
+    try:
+        _rapid_login_limiter.check(f"rapid_login:{user.id}", _RAPID_LOGIN_LIMIT, _RAPID_LOGIN_WINDOW_SECONDS)
+    except RateLimitExceeded:
+        if _rapid_login_alert_cooldown.allow(f"rapid_alert:{user.id}", _RAPID_LOGIN_WINDOW_SECONDS):
+            asyncio.create_task(
+                login_security_service.publish_rapid_login_alert(
+                    user, get_client_ip(request), _RAPID_LOGIN_LIMIT, _RAPID_LOGIN_WINDOW_SECONDS
+                )
+            )
+
     return user
 
 
