@@ -86,6 +86,7 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         ai_vision_synced_at=camera.ai_vision_synced_at,
         created_at=camera.created_at,
         is_active=camera.is_active,
+        is_online=camera.is_online,
     )
 
 
@@ -273,34 +274,42 @@ async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uui
     camera = await get_camera(db, current_user, camera_id)
     stream_online, is_starting = await mediamtx_service.check_source_alive(camera.id)
 
-    status = True
     details = []
 
+    if not stream_online and not is_starting:
+        stream_is_healthy = False
+        details.append("Stream is offline")
+    elif is_starting:
+        from app.core.url_utils import check_rtsp_stream
+        stream_is_healthy = await check_rtsp_stream(camera.stream_ai)
+        if stream_is_healthy:
+            details.append("Stream is on standby")
+        else:
+            details.append("Camera is offline")
+    else:
+        stream_is_healthy = True
+
     if not camera.is_active:
-        status = False
         details.append("Camera is not active")
 
     if camera.verification_status != CameraVerificationStatus.VERIFIED:
-        status = False
         details.append(f"Verification status is '{camera.verification_status.value}'")
 
-    if not stream_online and not is_starting:
+    # Strict condition: active AND online AND verified
+    if camera.is_active and stream_is_healthy and camera.verification_status == CameraVerificationStatus.VERIFIED:
+        status = True
+    else:
         status = False
-        details.append("Stream is offline")
-    elif is_starting:
-        from app.core.url_utils import check_tcp_port
-        is_port_open = await check_tcp_port(camera.stream_ai)
-        if is_port_open:
-            details.append("Stream is on standby")
-        else:
-            status = False
-            details.append("Camera is offline")
+
+    if camera.is_online != stream_is_healthy:
+        camera.is_online = stream_is_healthy
+        await db.commit()
 
     return CameraStatusRead(
         id=camera.id,
         is_active=camera.is_active,
         verification_status=camera.verification_status,
-        stream_online=stream_online,
+        stream_online=stream_is_healthy,
         is_starting=is_starting,
         status=status,
         detail=", ".join(details) if details else None,
@@ -871,3 +880,39 @@ async def push_cameras_online(village_id: uuid.UUID, camera_ids: list[uuid.UUID]
     for camera, _, failed_services in outcomes:
         if failed_services:
             await notify_sync_failure(village_id, camera.id, camera.name, list(dict.fromkeys(failed_services)))
+
+async def check_and_update_camera_statuses(db: AsyncSession) -> int:
+    from app.core.url_utils import check_rtsp_stream
+    from app.services import channel_service
+    
+    result = await db.execute(select(Camera).where(Camera.is_active == True))
+    cameras = result.scalars().all()
+    if not cameras:
+        return 0
+
+    semaphore = asyncio.Semaphore(10)
+
+    async def _check_camera(camera: Camera) -> tuple[Camera, bool]:
+        async with semaphore:
+            is_online = await check_rtsp_stream(camera.stream_ai)
+            return camera, is_online
+
+    outcomes = await asyncio.gather(*(_check_camera(c) for c in cameras))
+    
+    updates_made = 0
+    for camera, is_online in outcomes:
+        if camera.is_online != is_online:
+            camera.is_online = is_online
+            updates_made += 1
+            
+            # Real-time update to dashboard
+            await channel_service.alerts.publish(
+                camera.village_id,
+                "camera_status_changed",
+                {"camera_id": str(camera.id), "is_online": is_online}
+            )
+
+    if updates_made > 0:
+        await db.commit()
+        
+    return updates_made

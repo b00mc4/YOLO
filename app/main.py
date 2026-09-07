@@ -100,10 +100,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _run_cleanup_loop("Image", _IMAGE_CLEANUP_INTERVAL_SECONDS, detection_service.cleanup_orphaned_images)
     )
     app.state.startup_clean_image_task = clean_image_task
+    
+    camera_status_task = asyncio.create_task(
+        _run_cleanup_loop("CameraStatus", 180, camera_service.check_and_update_camera_statuses)
+    )
+    app.state.camera_status_task = camera_status_task
 
     yield
 
-    for task in (resync_task, verification_resume_task, clean_notification_task, clean_auth_task, clean_image_task):
+    for task in (resync_task, verification_resume_task, clean_notification_task, clean_auth_task, clean_image_task, camera_status_task):
         if not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

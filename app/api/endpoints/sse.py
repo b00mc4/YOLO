@@ -70,27 +70,6 @@ async def create_sse_ticket(
     return SSETicketResponse(ticket=ticket)
 
 
-@router.get("/alerts")
-async def stream_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id, password_changed_at = channel_service.alerts.resolve_ticket(ticket)
-
-    try:
-        channel_service.alerts.register_connection(user_id)
-    except ConnectionLimitExceeded as exc:
-        raise _connection_limit_exceeded_response(exc)
-
-    queue = channel_service.alerts.subscribe(village_id)
-
-    async def event_generator():
-        try:
-            async for event in _base_event_generator(request, user_id, village_id, password_changed_at, queue):
-                yield event
-        finally:
-            channel_service.alerts.unsubscribe(village_id, queue)
-            channel_service.alerts.unregister_connection(user_id)
-
-    return EventSourceResponse(event_generator())
-
 
 @router.post(
     "/security-alerts/ticket",
@@ -104,26 +83,6 @@ async def create_security_alert_ticket(
     return SSETicketResponse(ticket=ticket)
 
 
-@router.get("/security-alerts")
-async def stream_security_alerts(request: Request, ticket: str = Query(...)):
-    user_id, village_id, password_changed_at = channel_service.security_alerts.resolve_ticket(ticket)
-
-    try:
-        channel_service.security_alerts.register_connection(user_id)
-    except ConnectionLimitExceeded as exc:
-        raise _connection_limit_exceeded_response(exc)
-
-    queue = channel_service.security_alerts.subscribe(village_id)
-
-    async def event_generator():
-        try:
-            async for event in _base_event_generator(request, user_id, village_id, password_changed_at, queue):
-                yield event
-        finally:
-            channel_service.security_alerts.unsubscribe(village_id, queue)
-            channel_service.security_alerts.unregister_connection(user_id)
-
-    return EventSourceResponse(event_generator())
 
 
 @router.post(
@@ -139,33 +98,7 @@ async def create_presence_ticket(
     return PresenceTicketResponse(ticket=ticket)
 
 
-@router.get("/presence")
-async def stream_presence(request: Request, ticket: str = Query(...)):
-    ticket_data = presence_service.resolve_presence_ticket(ticket)
 
-    try:
-        conn_id = await presence_service.register_connection(ticket_data)
-    except ConnectionLimitExceeded as exc:
-        raise _connection_limit_exceeded_response(exc)
-
-    watcher_queue = presence_service.register_watcher(ticket_data)
-
-    async def event_generator():
-        try:
-            initial_snapshot = await presence_service.build_snapshot_for_ticket(ticket_data)
-            if initial_snapshot is not None:
-                yield {
-                    "event": "presence_update",
-                    "data": json.dumps(initial_snapshot, default=str),
-                }
-
-            async for event in _base_event_generator(request, ticket_data.user_id, ticket_data.village_id, ticket_data.password_changed_at, watcher_queue):
-                yield event
-        finally:
-            presence_service.unregister_watcher(ticket_data, watcher_queue)
-            await presence_service.unregister_connection(conn_id)
-
-    return EventSourceResponse(event_generator())
 
 
 @router.get("/stream")
@@ -233,6 +166,7 @@ async def multiplex_stream(
         while len(user_streams) > limit:
             oldest_q = user_streams.popleft()
             try:
+                oldest_q.put_nowait({"event": "force_close", "data": "Too many connections"})
                 oldest_q.put_nowait(CLOSE_SENTINEL)
             except asyncio.QueueFull:
                 pass

@@ -115,6 +115,7 @@ class CameraRead(BaseModel):
     ai_vision_synced_at: datetime | None
     created_at: datetime
     is_active: bool
+    is_online: bool | None = None
 
     @field_validator("stream_ai")
     @classmethod
@@ -131,6 +132,7 @@ class CameraBasicRead(BaseModel):
     long: float
     direction: CameraDirection | None
     is_active: bool
+    is_online: bool | None = None
 
 
 class CameraStatusRead(BaseModel):

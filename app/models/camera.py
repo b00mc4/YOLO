@@ -55,6 +55,7 @@ class Camera(Base):
     ai_vision_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active = Column(Boolean, nullable=False, server_default=true())
+    is_online = Column(Boolean, nullable=True)
 
     village = relationship("Group", back_populates="cameras")
     detections = relationship("Car", back_populates="camera", passive_deletes=True)
