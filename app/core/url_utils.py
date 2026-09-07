@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from urllib.parse import quote, urlsplit, urlunsplit
 from app.core.error_messages import CameraErrors
 
@@ -54,3 +55,28 @@ def redact_rtsp_url(raw: str) -> str:
         return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
     except Exception:
         return raw
+
+
+async def check_tcp_port(url: str, timeout: float = 1.5) -> bool:
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        port = parts.port
+        if not port:
+            if parts.scheme == "rtsps":
+                port = 322
+            else:
+                port = 554
+                
+        if not host:
+            return False
+
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=timeout
+        )
+        writer.close()
+        await writer.wait_closed()
+        return True
+    except Exception:
+        return False

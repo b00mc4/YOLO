@@ -288,7 +288,13 @@ async def get_camera_status(db: AsyncSession, current_user: User, camera_id: uui
         status = False
         details.append("Stream is offline")
     elif is_starting:
-        details.append("Stream is on standby")
+        from app.core.url_utils import check_tcp_port
+        is_port_open = await check_tcp_port(camera.stream_ai)
+        if is_port_open:
+            details.append("Stream is on standby")
+        else:
+            status = False
+            details.append("Camera is offline")
 
     return CameraStatusRead(
         id=camera.id,
