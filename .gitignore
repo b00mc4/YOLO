@@ -34,7 +34,6 @@ alembic/versions/__pycache__/
 .DS_Store
 
 mediamtx.exe
-mediamtx.yml
 mediamtx.log
 auto.crt
 auto.key

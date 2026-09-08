@@ -1,0 +1,67 @@
+services:
+
+  db:
+    image: postgres:15
+    container_name: village_guard_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d YOLO_PROJECT"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - village_net
+
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: village_guard_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      MEDIAMTX_API_URL: http://mediamtx:9997
+      MEDIAMTX_PUBLIC_URL: http://mediamtx:8888
+    volumes:
+      - ./storage:/app/storage
+      - ./:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - village_net
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: village_guard_mediamtx
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+      - "8554:8554"
+      - "9997:9997"
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MTX_AUTHJWTJWKS: http://api:8000/api/mediamtx/jwks
+    networks:
+      - village_net
+
+volumes:
+  pgdata:
+
+networks:
+  village_net:
+    driver: bridge
