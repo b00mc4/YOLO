@@ -1,0 +1,25 @@
+name: Build and Push to Docker Hub
+on:
+  push:
+     branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. ดึงโค้ดล่าสุด
+        uses: actions/checkout@v4
+
+      - name: 2. ล็อกอินเข้า Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 3. สร้าง Docker Image และดันขึ้น Docker Hub
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/yolooo-api:latest
