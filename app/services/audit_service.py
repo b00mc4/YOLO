@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 from app.models.group import Group
 from app.models.user import User, UserRole
-from app.schemas.audit_log import AuditLogRead
+from app.schemas.audit_log import AuditLogRead, AuditLogAction
 from app.schemas.common import PaginatedResponse
 from app.core.request_utils import get_client_ip
 from app.core.error_messages import Common
@@ -23,7 +23,7 @@ _BACKGROUND_USER_AGENT = "background-task"
 async def log_action(
     db: AsyncSession,
     request: Request | None,
-    action: str,
+    action: str | AuditLogAction,
     detail: str,
     user_id: uuid.UUID | None = None,
     village_id: uuid.UUID | None = None,
@@ -42,12 +42,15 @@ async def log_action(
         else:
             user_result = await db.execute(select(User.username).where(User.id == user_id))
             actor_username = user_result.scalar_one_or_none()
+            
+    # Convert AuditLogAction enum to string for database
+    action_str = action.value if isinstance(action, AuditLogAction) else action
 
     entry = AuditLog(
         village_id=village_id,
         user_id=user_id,
         actor_username=actor_username,
-        action=action,
+        action=action_str,
         detail=detail[:_DETAIL_MAX_LENGTH],
         ip_address=ip_address,
         user_agent=user_agent,
@@ -60,7 +63,7 @@ def _build_audit_log_filters(
     current_user: User,
     village_id_filter: uuid.UUID | None,
     user_id_filter: uuid.UUID | None,
-    action_filter: str | None,
+    action_filter: AuditLogAction | None,
     created_at_from: datetime | None,
     created_at_to: datetime | None,
 ) -> list:
@@ -101,7 +104,7 @@ async def list_audit_logs(
     current_user: User,
     village_id_filter: uuid.UUID | None,
     user_id_filter: uuid.UUID | None,
-    action_filter: str | None,
+    action_filter: AuditLogAction | None,
     created_at_from: datetime | None,
     created_at_to: datetime | None,
     page: int,

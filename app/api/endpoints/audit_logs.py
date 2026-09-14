@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
 from app.db.session import get_db
-from app.schemas.audit_log import AuditLogRead
+from app.schemas.audit_log import AuditLogRead, AuditLogAction
 from app.schemas.common import PaginatedResponse
 from app.services import audit_service
 from app.models.user import User, UserRole
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
 async def list_audit_logs(
     village_id: uuid.UUID | None = Query(default=None),
     user_id: uuid.UUID | None = Query(default=None),
-    action: str | None = Query(default=None),
+    action: AuditLogAction | None = Query(default=None),
     created_at_from: datetime | None = Query(default=None),
     created_at_to: datetime | None = Query(default=None),
     page: int = Query(default=1, ge=1),

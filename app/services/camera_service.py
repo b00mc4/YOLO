@@ -599,7 +599,6 @@ async def _run_resync_all_cameras_background(
             await notification_service.notify_village(db, target_village, "camera_resync_all_completed", detail)
             await channel_service.alerts.publish(target_village, "camera_resync_all_completed", payload)
         else:
-            await notification_service.notify_superadmins(db, "camera_resync_all_completed", detail)
             await channel_service.alerts.publish_global("camera_resync_all_completed", payload)
             
         await db.commit()

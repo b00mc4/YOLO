@@ -129,7 +129,6 @@ async def _finalize(
             village_id=camera.village_id,
         )
         await notification_service.notify_village(db, camera.village_id, action, detail)
-        await notification_service.notify_superadmins(db, action, detail)
         await db.commit()
 
         from app.services import ai_vision_service, mediamtx_service
@@ -190,7 +189,6 @@ async def _handle_verification_timeout(camera_id: uuid.UUID) -> None:
             village_id=camera.village_id,
         )
         await notification_service.notify_village(db, camera.village_id, action, detail)
-        await notification_service.notify_superadmins(db, action, detail)
         await db.commit()
 
         from app.services import ai_vision_service, mediamtx_service
