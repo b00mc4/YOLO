@@ -22,10 +22,6 @@ async def close() -> None:
     if _client is not None and not _client.is_closed:
         await _client.aclose()
         _client = None
-_client = httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS)
-
-async def close() -> None:
-    await _client.aclose()
 
 class VerificationCheckResult(str, enum.Enum):
     VERIFIED = "verified"

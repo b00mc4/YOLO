@@ -3,9 +3,13 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import AsyncGenerator
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
+from app.core.rate_limit import get_rate_limiter, RateLimitExceeded
+from app.core.error_messages import Common
+from app.schemas.common import ErrorResponse
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker, engine
@@ -22,19 +26,22 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 _STARTUP_RESYNC_MAX_ATTEMPTS = 3
 _STARTUP_RESYNC_BACKOFF_BASE_SECONDS = 2.0
 
+_MAX_PAYLOAD_SIZE_BYTES = 10 * 1024 * 1024  
+_GLOBAL_RATE_LIMIT = 200
+_GLOBAL_RATE_LIMIT_WINDOW = 60.0
 
-async def _run_cleanup_loop(name: str, interval: int, task_fn) -> None:
+async def _run_background_loop(name: str, interval: int, task_fn, action_message: str = "cleanup: removed") -> None:
     consecutive_errors = 0
     while True:
         try:
             async with async_session_maker() as db:
-                deleted = await task_fn(db)
-            if deleted:
-                logger.info("%s cleanup: removed %s item(s)", name, deleted)
+                count = await task_fn(db)
+            if count:
+                logger.info("%s %s %s item(s)", name, action_message, count)
             consecutive_errors = 0
         except Exception:
             consecutive_errors += 1
-            logger.exception("%s cleanup loop iteration failed (error count: %s)", name, consecutive_errors)
+            logger.exception("%s loop iteration failed (error count: %s)", name, consecutive_errors)
 
         if consecutive_errors > 0:
             backoff = min(3600, 10 * (2 ** min(consecutive_errors - 1, 10)))
@@ -87,22 +94,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.startup_verification_resume_task = verification_resume_task
 
     clean_notification_task = asyncio.create_task(
-        _run_cleanup_loop("Notification", _NOTIFICATION_CLEANUP_INTERVAL_SECONDS, notification_service.cleanup_old_notifications)
+        _run_background_loop("Notification", _NOTIFICATION_CLEANUP_INTERVAL_SECONDS, notification_service.cleanup_old_notifications)
     )
     app.state.startup_clean_notification_task = clean_notification_task
 
     clean_auth_task = asyncio.create_task(
-        _run_cleanup_loop("Auth", _AUTH_CLEANUP_INTERVAL_SECONDS, auth_service.cleanup_expired_refresh_tokens)
+        _run_background_loop("Auth", _AUTH_CLEANUP_INTERVAL_SECONDS, auth_service.cleanup_expired_refresh_tokens)
     )
     app.state.startup_clean_auth_task = clean_auth_task
 
     clean_image_task = asyncio.create_task(
-        _run_cleanup_loop("Image", _IMAGE_CLEANUP_INTERVAL_SECONDS, detection_service.cleanup_orphaned_images)
+        _run_background_loop("Image", _IMAGE_CLEANUP_INTERVAL_SECONDS, detection_service.cleanup_orphaned_images)
     )
     app.state.startup_clean_image_task = clean_image_task
     
     camera_status_task = asyncio.create_task(
-        _run_cleanup_loop("CameraStatus", 180, camera_service.check_and_update_camera_statuses)
+        _run_background_loop(
+            "CameraStatus", 
+            180, 
+            camera_service.check_and_update_camera_statuses,
+            action_message="status sync: updated"
+        )
     )
     app.state.camera_status_task = camera_status_task
 
@@ -135,6 +147,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    if "content-length" in request.headers:
+        try:
+            content_length = int(request.headers["content-length"])
+        except ValueError:
+            content_length = 0
+            
+        if content_length > _MAX_PAYLOAD_SIZE_BYTES:
+            return JSONResponse(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                content={"detail": f"ขนาดข้อมูลใหญ่เกินไป (สูงสุด {_MAX_PAYLOAD_SIZE_BYTES // (1024 * 1024)}MB)"}
+            )
+
+    if not request.url.path.startswith("/health") and not request.url.path.startswith("/api/sse"):
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        limiter = get_rate_limiter()
+        try:
+            limiter.check(f"global:{client_ip}", limit=_GLOBAL_RATE_LIMIT, window_seconds=_GLOBAL_RATE_LIMIT_WINDOW)
+        except RateLimitExceeded as e:
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content=ErrorResponse(detail=Common.TOO_MANY_REQUESTS).model_dump(),
+                headers={"Retry-After": str(int(e.retry_after_seconds) + 1)},
+            )
+            
+    return await call_next(request)
 
 register_exception_handlers(app)
 app.include_router(api_router)
