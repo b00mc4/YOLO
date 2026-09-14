@@ -31,7 +31,7 @@ async def close() -> None:
         _client = None
 
 
-_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS = 10.0
+_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS = 15.0
 _COLD_START_POLL_INTERVAL_SECONDS = 1.0
 _COLD_START_POLL_BUFFER_SECONDS = 2.0
 _COLD_START_MAX_WAIT_SECONDS = _SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS + _COLD_START_POLL_BUFFER_SECONDS
@@ -50,9 +50,9 @@ def _path_name(camera_id: uuid.UUID) -> str:
     return str(camera_id)
 
 
-def derive_stream_url(camera_id: uuid.UUID) -> str:
-    token = mediamtx_auth_service.issue_stream_token(camera_id)
-    return f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8?jwt={token}"
+def derive_stream_url(camera_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    token = mediamtx_auth_service.issue_stream_token(camera_id, user_id)
+    return f"/mediamtx/{camera_id}/index.m3u8?jwt={token}"
 
 
 async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
@@ -64,7 +64,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
             url,
             json={
                 "source": source_rtsp_url,
-                "sourceOnDemand": True,
+                "sourceOnDemand": False,
                 "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
                 "sourceProtocol": "tcp",
             },
@@ -81,7 +81,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
                 add_url,
                 json={
                     "source": source_rtsp_url,
-                    "sourceOnDemand": True,
+                    "sourceOnDemand": False,
                     "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
                     "sourceProtocol": "tcp",
                 },
@@ -98,7 +98,7 @@ async def upsert_path(camera_id: uuid.UUID, source_rtsp_url: str) -> bool:
                 add_url,
                 json={
                     "source": source_rtsp_url,
-                    "sourceOnDemand": True,
+                    "sourceOnDemand": False,
                     "sourceOnDemandStartTimeout": f"{int(_SOURCE_ON_DEMAND_START_TIMEOUT_SECONDS)}s",
                     "sourceProtocol": "tcp",
                 },
@@ -167,8 +167,10 @@ async def _get_path_info(camera_id: uuid.UUID) -> dict | None:
 
 
 async def _trigger_on_demand_pull(camera_id: uuid.UUID) -> None:
-    token = mediamtx_auth_service.issue_stream_token(camera_id)
-    playlist_url = f"{settings.mediamtx_public_url.rstrip('/')}/{camera_id}/index.m3u8?jwt={token}"
+    token = mediamtx_auth_service.issue_stream_token(camera_id, uuid.UUID(int=0))
+    parsed = httpx.URL(settings.mediamtx_api_url)
+    internal_hls_base = f"{parsed.scheme}://{parsed.host}:8888"
+    playlist_url = f"{internal_hls_base}/{camera_id}/index.m3u8?jwt={token}"
 
     try:
         await _client.get(playlist_url, timeout=_TRIGGER_PULL_TIMEOUT_SECONDS)

@@ -36,9 +36,9 @@ class VerificationCheckResult(str, enum.Enum):
 
 
 def derive_webhook_url() -> str:
-    return f"{settings.backend_public_url.rstrip('/')}/api/detections"
+    return f"{settings.backend_public_url.rstrip('/')}/detections"
 
-async def push_camera_config(camera_id: uuid.UUID, stream_ai: str) -> bool:
+async def push_camera_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> bool:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras"
 
     try:
@@ -48,6 +48,7 @@ async def push_camera_config(camera_id: uuid.UUID, stream_ai: str) -> bool:
                 "camera_id": str(camera_id),
                 "camera_url": stream_ai,
                 "webhook_url": derive_webhook_url(),
+                "delay": delay,
             },
             headers={"X-API-Key": settings.ai_vision_api_key},
         )

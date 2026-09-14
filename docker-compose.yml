@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
 
   db:
@@ -8,6 +10,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Bangkok
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,15 +31,13 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      MEDIAMTX_API_URL: http://mediamtx:9997
-      MEDIAMTX_PUBLIC_URL: http://mediamtx:8888
+      TZ: Asia/Bangkok
     volumes:
       - ./storage:/app/storage
       - ./:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     networks:
       - village_net
 
@@ -48,8 +49,6 @@ services:
       - "8554:8554"
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
-    environment:
-      MTX_AUTHJWTJWKS: http://api:8000/api/mediamtx/jwks
     networks:
       - village_net
 
@@ -61,6 +60,8 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - api
     networks:

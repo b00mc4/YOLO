@@ -1,5 +1,6 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+from datetime import datetime
+from app.core.timezone import BANGKOK_TZ
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
@@ -39,7 +40,7 @@ async def publish_bruteforce_alert(
     locked_for_seconds: float,
     ip_address: str,
 ) -> None:
-    occurred_at = datetime.now(timezone.utc)
+    occurred_at = datetime.now(BANGKOK_TZ)
     user_id = user.id if user is not None else None
     village_id = user.village_id if user is not None else None
 
@@ -90,7 +91,7 @@ async def publish_rapid_login_alert(
     count: int,
     window_seconds: int,
 ) -> None:
-    occurred_at = datetime.now(timezone.utc)
+    occurred_at = datetime.now(BANGKOK_TZ)
     detail = f"Rapid login detected for user {user.username}: {count} times within {window_seconds} seconds"
 
     async with async_session_maker() as db:

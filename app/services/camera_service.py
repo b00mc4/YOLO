@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 
-async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
+async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> tuple[bool, list[str]]:
     """Return (ai_vision_accepted, failed_service_names)."""
     failed_services: list[str] = []
 
@@ -41,19 +41,17 @@ async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str) -> tuple[boo
     if not mediamtx_ok:
         failed_services.append("mediamtx")
 
-    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai)
+    ai_vision_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai, delay)
     if not ai_vision_ok:
         failed_services.append("ai_vision")
 
     return ai_vision_ok, failed_services
 
-async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str) -> tuple[bool, list[str]]:
-    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai)
+async def _sync_camera_online(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> tuple[bool, list[str]]:
+    ai_vision_pushed, failed_services = await _push_stream_config(camera_id, stream_ai, delay)
 
     should_verify = False
     if ai_vision_pushed:
-        # AI Vision resets verification_status to 'pending' when stream config is pushed.
-        # We must verify the RTSP stream first before we can activate it (is_active=True).
         should_verify = True
 
     return should_verify, failed_services
@@ -87,6 +85,7 @@ def _to_camera_read(camera: Camera) -> CameraRead:
         created_at=camera.created_at,
         is_active=camera.is_active,
         is_online=camera.is_online,
+        delay=camera.delay,
     )
 
 
@@ -130,8 +129,9 @@ async def _sync_camera_create(
     village_id: uuid.UUID,
     camera_name: str,
     stream_ai: str,
+    delay: int = 1,
 ) -> None:
-    should_verify, failed_services = await _sync_camera_online(camera_id, stream_ai)
+    should_verify, failed_services = await _sync_camera_online(camera_id, stream_ai, delay)
 
     if should_verify:
         camera_verification_service.start_verification(camera_id)
@@ -165,6 +165,7 @@ async def _sync_camera_update(
     camera_name: str,
     is_active: bool | None,
     stream_ai: str | None = None,
+    delay: int | None = None,
 ) -> None:
     failed_services: list[str] = []
 
@@ -181,6 +182,11 @@ async def _sync_camera_update(
             mediamtx_ok = await mediamtx_service.remove_path(camera_id)
             if not mediamtx_ok:
                 failed_services.append("mediamtx")
+
+    if delay is not None and stream_ai:
+        push_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai, delay)
+        if not push_ok:
+            failed_services.append("ai_vision")
 
     if failed_services:
         await notify_sync_failure(village_id, camera_id, camera_name, list(dict.fromkeys(failed_services)))
@@ -233,6 +239,7 @@ async def create_camera(
         long=payload.long,
         stream_ai=payload.stream_ai,
         direction=payload.direction,
+        delay=payload.delay,
         is_active=True,
         verification_status=CameraVerificationStatus.PENDING,
     )
@@ -251,7 +258,7 @@ async def create_camera(
     await db.refresh(camera)
 
     background_tasks.add_task(
-        _sync_camera_create, camera.id, camera.village_id, camera.name, camera.stream_ai
+        _sync_camera_create, camera.id, camera.village_id, camera.name, camera.stream_ai, camera.delay
     )
 
     return _to_camera_read(camera)
@@ -337,10 +344,8 @@ async def get_camera_stream_token(
             detail=CameraErrors.STREAM_UNAVAILABLE_INACTIVE,
         )
 
-    stream_url = mediamtx_service.derive_stream_url(camera_id)
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        seconds=settings.mediamtx_stream_token_expire_seconds
-    )
+    stream_url = mediamtx_service.derive_stream_url(camera_id, current_user.id)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
     return CameraStreamTokenRead(
         camera_id=camera_id,
@@ -440,6 +445,7 @@ async def update_camera(
 
     is_active_changed = "is_active" in update_data and update_data["is_active"] != camera.is_active
     stream_ai_changed = "stream_ai" in update_data and update_data["stream_ai"] != camera.stream_ai
+    delay_changed = "delay" in update_data and update_data["delay"] != camera.delay
 
     for field, value in update_data.items():
         setattr(camera, field, value)
@@ -466,7 +472,7 @@ async def update_camera(
     await db.commit()
     await db.refresh(camera)
 
-    if (is_active_changed or stream_ai_changed) and village.is_active:
+    if (is_active_changed or stream_ai_changed or delay_changed) and village.is_active:
         background_tasks.add_task(
             _sync_camera_update,
             camera.id,
@@ -474,6 +480,7 @@ async def update_camera(
             camera.name,
             camera.is_active,
             camera.stream_ai,
+            camera.delay if delay_changed else None,
         )
     elif is_active_changed or stream_ai_changed:
         logger.info(
@@ -637,7 +644,7 @@ async def resync_camera_ai_vision(
 ) -> CameraRead:
     camera = await get_camera(db, current_user, camera_id)
 
-    pushed = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai)
+    pushed = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai, camera.delay)
     if not pushed:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

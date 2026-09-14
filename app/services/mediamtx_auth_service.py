@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
-from jwt.algorithms import ECAlgorithm
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -28,19 +27,15 @@ def _load_private_key() -> EllipticCurvePrivateKey:
     return _PRIVATE_KEY
 
 
-def issue_stream_token(camera_id: uuid.UUID) -> str:
+def issue_stream_token(camera_id: uuid.UUID, user_id: uuid.UUID) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "iat": now,
         "nbf": now,
-        "exp": now + timedelta(seconds=settings.mediamtx_stream_token_expire_seconds),
+        "exp": now + timedelta(minutes=15),
+        "user_id": str(user_id),
         _MEDIAMTX_PERMISSIONS_CLAIM: [
             {"action": _READ_ACTION, "path": str(camera_id)},
         ],
     }
     return jwt.encode(payload, _load_private_key(), algorithm=_JWT_ALGORITHM)
-
-
-def get_jwks() -> dict:
-    public_key = _load_private_key().public_key()
-    return {"keys": [ECAlgorithm.to_jwk(public_key, as_dict=True)]}

@@ -25,7 +25,7 @@ async def create_superadmin(username: str, email: str, fullname: str, password: 
             email=email,
             role=UserRole.SUPERADMIN,
             village_id=None,
-            hashpassword=hash_password(password),
+            hashpassword=await hash_password(password),
             is_active=True,
             is_verify=True,
         )

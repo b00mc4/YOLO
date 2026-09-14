@@ -1,12 +1,27 @@
+rtsp: yes
 rtspTransports: [tcp]
+readTimeout: 30s
+readBufferCount: 8192
 
 api: yes
 apiAddress: :9997
 
 hls: yes
 hlsAddress: :8888
+hlsTrustedProxies: [172.16.0.0/12, 192.168.0.0/16, 10.0.0.0/8]
 
-authMethod: jwt
+hlsSegmentCount: 10
+hlsSegmentDuration: 2s
+hlsVariant: mpegts
+
+rtmp: no
+webrtc: no
+srt: no
+moq: no
+
+authMethod: http
+
+authHTTPAddress: http://api:8000/api/mediamtx/webhook
 
 authInternalUsers:
   - user: superadmin
@@ -15,11 +30,5 @@ authInternalUsers:
     permissions:
       - action: api
 
-paths:
-  raw-test-cam-1:
-
-authJWTJWKS: http://192.168.100.211:8000/api/mediamtx/jwks
-authJWTClaimKey: mediamtx_permissions
-authJWTExclude:
+authHTTPExclude:
   - action: api
-authJWTInHTTPQuery: true

@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Boolean, UniqueConstraint, true
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Boolean, UniqueConstraint, true
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -56,6 +56,7 @@ class Camera(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     is_active = Column(Boolean, nullable=False, server_default=true())
     is_online = Column(Boolean, nullable=True)
+    delay = Column(Integer, nullable=False, server_default="1")
 
     village = relationship("Group", back_populates="cameras")
     detections = relationship("Car", back_populates="camera", passive_deletes=True)
