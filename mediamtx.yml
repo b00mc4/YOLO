@@ -32,3 +32,6 @@ authInternalUsers:
 
 authHTTPExclude:
   - action: api
+
+paths:
+  all_others:

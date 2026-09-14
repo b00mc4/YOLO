@@ -85,13 +85,13 @@ async def check_tcp_port(url: str, timeout: float = 1.5) -> bool:
 async def check_rtsp_stream(url: str, timeout: float = 2.0) -> bool:
     import asyncio
     from urllib.parse import urlparse
-    parsed = urlparse(url)
-    host = parsed.hostname
-    if not host:
-        return False
-    port = parsed.port or 554
 
     try:
+        parsed = urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return False
+        port = parsed.port or 554
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(host, port),
             timeout=timeout

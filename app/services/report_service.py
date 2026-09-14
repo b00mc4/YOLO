@@ -128,7 +128,7 @@ async def _collect_report_metrics(db: AsyncSession, base_filters: list) -> dict:
 def _compute_peak_time(hourly_buckets: list[HourlyBucket]) -> str:
     peak_bucket = max(hourly_buckets, key=lambda b: b.count)
     if peak_bucket.count == 0:
-        return "N/A"
+        return "-"
     return f"{peak_bucket.hour:02d}:00-{peak_bucket.hour:02d}:59"
 
 

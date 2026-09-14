@@ -18,7 +18,7 @@ _STREAM_SETUP = {
 
 async def _fetch_device_info(camera: ONVIFCamera) -> tuple[str | None, str | None]:
     try:
-        device_info = await camera.devicemgmt.GetDeviceInformation()
+        device_info = camera.devicemgmt.GetDeviceInformation()
     except Exception:
         return None, None
     return getattr(device_info, "Manufacturer", None), getattr(device_info, "Model", None)
@@ -28,7 +28,7 @@ async def _fetch_stream_uri(media_service, profile_token: str) -> str:
     request = media_service.create_type("GetStreamUri")
     request.ProfileToken = profile_token
     request.StreamSetup = _STREAM_SETUP
-    response = await media_service.GetStreamUri(request)
+    response = media_service.GetStreamUri(request)
     return response.Uri
 
 
@@ -53,15 +53,15 @@ def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
 
 
 async def _probe(host: str, port: int, username: str, password: str) -> dict:
-    camera = ONVIFCamera(host, port, username, password)
+    camera = ONVIFCamera(host, port, username, password, no_cache=True)
 
     try:
-        await camera.update_xaddrs()
+        camera.update_xaddrs()
 
         manufacturer, model = await _fetch_device_info(camera)
 
-        media_service = await camera.create_media_service()
-        profiles = await media_service.GetProfiles()
+        media_service = camera.create_media_service()
+        profiles = media_service.GetProfiles()
 
         if not profiles:
             raise HTTPException(
@@ -72,6 +72,14 @@ async def _probe(host: str, port: int, username: str, password: str) -> dict:
         profile_results = []
         for profile in profiles:
             rtsp_uri = await _fetch_stream_uri(media_service, profile.token)
+            
+            from urllib.parse import urlsplit, urlunsplit
+            parsed_rtsp = urlsplit(rtsp_uri)
+            netloc = host
+            if parsed_rtsp.port:
+                netloc += f":{parsed_rtsp.port}"
+            rtsp_uri = urlunsplit((parsed_rtsp.scheme, netloc, parsed_rtsp.path, parsed_rtsp.query, parsed_rtsp.fragment))
+            
             rtsp_uri = _with_rtsp_credentials(rtsp_uri, username, password)
             profile_results.append(_build_profile_entry(profile, rtsp_uri))
 
@@ -82,7 +90,9 @@ async def _probe(host: str, port: int, username: str, password: str) -> dict:
         }
     finally:
         try:
-            await camera.close()
+            camera.close()
+        except AttributeError:
+            pass # บางเวอร์ชันของ onvif-zeep ไม่มีคำสั่ง close()
         except Exception:
             logger.warning(
                 "onvif probe failed to close camera session cleanly for host=%s port=%s",
