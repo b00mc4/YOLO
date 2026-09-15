@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
+from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_roles
@@ -20,6 +21,7 @@ async def list_audit_logs(
     action: AuditLogAction | None = Query(default=None),
     created_at_from: datetime | None = Query(default=None),
     created_at_to: datetime | None = Query(default=None),
+    order: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.SUPERADMIN)),
@@ -33,6 +35,7 @@ async def list_audit_logs(
         action,
         created_at_from,
         created_at_to,
+        order,
         page,
         page_size,
     )

@@ -6,6 +6,7 @@ from onvif import ONVIFCamera
 from yarl import URL
 from zeep.exceptions import Fault, TransportError
 from app.core.error_messages import OnvifErrors
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger(__name__)
 
@@ -32,24 +33,24 @@ async def _fetch_stream_uri(media_service, profile_token: str) -> str:
     return response.Uri
 
 
-def _build_profile_entry(profile, rtsp_uri: str) -> dict:
-    video_encoder = getattr(profile, "VideoEncoderConfiguration", None)
-    resolution = getattr(video_encoder, "Resolution", None) if video_encoder else None
+    def _build_profile_entry(profile, rtsp_uri: str) -> dict:
+        video_encoder = getattr(profile, "VideoEncoderConfiguration", None)
+        resolution = getattr(video_encoder, "Resolution", None) if video_encoder else None
 
-    return {
-        "profile_token": profile.token,
-        "name": profile.Name,
-        "encoding": getattr(video_encoder, "Encoding", None) if video_encoder else None,
-        "width": getattr(resolution, "Width", None) if resolution else None,
-        "height": getattr(resolution, "Height", None) if resolution else None,
-        "rtsp_uri": rtsp_uri,
-    }
+        return {
+            "profile_token": profile.token,
+            "name": profile.Name,
+            "encoding": getattr(video_encoder, "Encoding", None) if video_encoder else None,
+            "width": getattr(resolution, "Width", None) if resolution else None,
+            "height": getattr(resolution, "Height", None) if resolution else None,
+            "rtsp_uri": rtsp_uri,
+        }
 
 
-def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
-    if not username:
-        return rtsp_uri
-    return str(URL(rtsp_uri).with_user(username).with_password(password))
+    def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
+        if not username:
+            return rtsp_uri
+        return str(URL(rtsp_uri).with_user(username).with_password(password))
 
 
 async def _probe(host: str, port: int, username: str, password: str) -> dict:
@@ -73,7 +74,6 @@ async def _probe(host: str, port: int, username: str, password: str) -> dict:
         for profile in profiles:
             rtsp_uri = await _fetch_stream_uri(media_service, profile.token)
             
-            from urllib.parse import urlsplit, urlunsplit
             parsed_rtsp = urlsplit(rtsp_uri)
             netloc = host
             if parsed_rtsp.port:
@@ -101,22 +101,6 @@ async def _probe(host: str, port: int, username: str, password: str) -> dict:
 
 
 async def probe_camera(host: str, port: int, username: str, password: str) -> dict:
-    if host.lower() == "mock":
-        return {
-            "device_manufacturer": "MockVision",
-            "device_model": "MV-1080P",
-            "profiles": [
-                {
-                    "profile_token": "profile_1",
-                    "name": "MainStream",
-                    "encoding": "H264",
-                    "width": 1920,
-                    "height": 1080,
-                    "rtsp_uri": f"rtsp://{username}:{password}@192.168.1.100:554/stream1" if username else "rtsp://192.168.1.100:554/stream1",
-                }
-            ],
-        }
-
     try:
         return await asyncio.wait_for(
             _probe(host, port, username, password), timeout=_PROBE_TIMEOUT_SECONDS

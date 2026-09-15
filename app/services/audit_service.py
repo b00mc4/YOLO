@@ -1,6 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
+from typing import Literal
 from fastapi import Request, HTTPException, status
 from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -107,6 +108,7 @@ async def list_audit_logs(
     action_filter: AuditLogAction | None,
     created_at_from: datetime | None,
     created_at_to: datetime | None,
+    order: Literal["asc", "desc"],
     page: int,
     page_size: int,
 ) -> PaginatedResponse[AuditLogRead]:
@@ -130,9 +132,10 @@ async def list_audit_logs(
     count_result = await db.execute(count_stmt)
     total = count_result.scalar_one()
 
+    order_col = AuditLog.created_at.asc() if order == "asc" else AuditLog.created_at.desc()
     stmt = (
         stmt.where(*filters)
-        .order_by(AuditLog.created_at.desc())
+        .order_by(order_col)
         .offset((page - 1) * page_size)
         .limit(page_size)
     )

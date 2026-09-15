@@ -1,7 +1,8 @@
 from __future__ import annotations
 import asyncio
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit, urlparse
 from app.core.error_messages import CameraErrors
+import asyncio
 
 _ALLOWED_SCHEMES = ("rtsp", "rtsps")
 
@@ -56,36 +57,7 @@ def redact_rtsp_url(raw: str) -> str:
     except Exception:
         return raw
 
-
-async def check_tcp_port(url: str, timeout: float = 1.5) -> bool:
-    try:
-        parts = urlsplit(url)
-        host = parts.hostname
-        port = parts.port
-        if not port:
-            if parts.scheme == "rtsps":
-                port = 322
-            else:
-                port = 554
-                
-        if not host:
-            return False
-
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port),
-            timeout=timeout
-        )
-        writer.close()
-        await writer.wait_closed()
-        return True
-    except Exception:
-        return False
-
-
 async def check_rtsp_stream(url: str, timeout: float = 2.0) -> bool:
-    import asyncio
-    from urllib.parse import urlparse
-
     try:
         parsed = urlparse(url)
         host = parsed.hostname

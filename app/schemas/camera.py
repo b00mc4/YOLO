@@ -47,7 +47,7 @@ class CameraCreate(BaseModel):
     long: float = Field(ge=-180, le=180)
     stream_ai: str = Field(max_length=1000)
     direction: CameraDirection
-    delay: int = Field(default=1, ge=1, le=60)
+    delay: int = Field(default=1, ge=1, le=300)
 
     @field_validator("name")
     @classmethod
@@ -78,7 +78,7 @@ class CameraUpdate(BaseModel):
     long: float | None = Field(default=None, ge=-180, le=180)
     direction: CameraDirection | None = None
     is_active: bool | None = None
-    delay: int | None = Field(default=None, ge=1, le=60)
+    delay: int | None = Field(default=None, ge=1, le=300)
 
     @field_validator("name")
     @classmethod
