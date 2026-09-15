@@ -33,24 +33,24 @@ async def _fetch_stream_uri(media_service, profile_token: str) -> str:
     return response.Uri
 
 
-    def _build_profile_entry(profile, rtsp_uri: str) -> dict:
-        video_encoder = getattr(profile, "VideoEncoderConfiguration", None)
-        resolution = getattr(video_encoder, "Resolution", None) if video_encoder else None
+def _build_profile_entry(profile, rtsp_uri: str) -> dict:
+    video_encoder = getattr(profile, "VideoEncoderConfiguration", None)
+    resolution = getattr(video_encoder, "Resolution", None) if video_encoder else None
 
-        return {
-            "profile_token": profile.token,
-            "name": profile.Name,
-            "encoding": getattr(video_encoder, "Encoding", None) if video_encoder else None,
-            "width": getattr(resolution, "Width", None) if resolution else None,
-            "height": getattr(resolution, "Height", None) if resolution else None,
-            "rtsp_uri": rtsp_uri,
-        }
+    return {
+        "profile_token": profile.token,
+        "name": profile.Name,
+        "encoding": getattr(video_encoder, "Encoding", None) if video_encoder else None,
+        "width": getattr(resolution, "Width", None) if resolution else None,
+        "height": getattr(resolution, "Height", None) if resolution else None,
+        "rtsp_uri": rtsp_uri,
+    }
 
 
-    def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
-        if not username:
-            return rtsp_uri
-        return str(URL(rtsp_uri).with_user(username).with_password(password))
+def _with_rtsp_credentials(rtsp_uri: str, username: str, password: str) -> str:
+    if not username:
+        return rtsp_uri
+    return str(URL(rtsp_uri).with_user(username).with_password(password))
 
 
 async def _probe(host: str, port: int, username: str, password: str) -> dict:

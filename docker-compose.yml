@@ -67,19 +67,6 @@ services:
     networks:
       - village_net
 
-  onvif-simulator:
-    image: ezequielmr94/onvif-ip-camera-mock:latest
-    container_name: village_guard_onvif
-    restart: unless-stopped
-    environment:
-      RTSP_URL: rtsp://mediamtx:8554/cam1
-    ports:
-      - "8082:8000"
-    depends_on:
-      - mediamtx
-    networks:
-      - village_net
-
 volumes:
   pgdata:
 

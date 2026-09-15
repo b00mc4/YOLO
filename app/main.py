@@ -15,9 +15,7 @@ from app.core.exceptions import register_exception_handlers
 from app.db.session import async_session_maker, engine
 from app.services import ai_vision_service, auth_service, camera_service, camera_verification_service, mediamtx_service, notification_service, detection_service
 
-_NOTIFICATION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 _AUTH_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
-_IMAGE_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -93,21 +91,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     verification_resume_task = asyncio.create_task(_resume_camera_verification_background())
     app.state.startup_verification_resume_task = verification_resume_task
 
-    clean_notification_task = asyncio.create_task(
-        _run_background_loop("Notification", _NOTIFICATION_CLEANUP_INTERVAL_SECONDS, notification_service.cleanup_old_notifications)
-    )
-    app.state.startup_clean_notification_task = clean_notification_task
-
     clean_auth_task = asyncio.create_task(
         _run_background_loop("Auth", _AUTH_CLEANUP_INTERVAL_SECONDS, auth_service.cleanup_expired_refresh_tokens)
     )
     app.state.startup_clean_auth_task = clean_auth_task
 
-    clean_image_task = asyncio.create_task(
-        _run_background_loop("Image", _IMAGE_CLEANUP_INTERVAL_SECONDS, detection_service.cleanup_orphaned_images)
-    )
-    app.state.startup_clean_image_task = clean_image_task
-    
     camera_status_task = asyncio.create_task(
         _run_background_loop(
             "CameraStatus", 
@@ -120,7 +108,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
-    for task in (resync_task, verification_resume_task, clean_notification_task, clean_auth_task, clean_image_task, camera_status_task):
+    for task in (resync_task, verification_resume_task, clean_auth_task, camera_status_task):
         if not task.done():
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

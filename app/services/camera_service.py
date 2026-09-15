@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 
 
 async def _push_stream_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> tuple[bool, list[str]]:
-    """Return (ai_vision_accepted, failed_service_names)."""
     failed_services: list[str] = []
 
     mediamtx_ok = await mediamtx_service.upsert_path(camera_id, stream_ai)
@@ -96,8 +95,7 @@ async def notify_sync_failure(
     failed_services: list[str],
 ) -> None:
     detail = (
-        f"camera sync failed for '{camera_name}' (id={camera_id}): "
-        f"{', '.join(failed_services)} did not accept the update"
+        f"camera sync failed for '{camera_name}' (id={camera_id}): "f"{', '.join(failed_services)} did not accept the update"
     )
     logger.error(detail)
 
@@ -419,14 +417,6 @@ async def update_camera(
             detail=CameraErrors.CANNOT_ACTIVATE_VILLAGE_INACTIVE,
         )
 
-
-    if "is_active" in update_data and update_data["is_active"] and not village.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=CameraErrors.CANNOT_ACTIVATE_VILLAGE_INACTIVE,
-        )
-
-    
     if "name" in update_data and update_data["name"] != camera.name:
         existing_name_result = await db.execute(select(Camera).where(Camera.village_id == camera.village_id, Camera.name == update_data["name"]))
         if existing_name_result.scalars().first():

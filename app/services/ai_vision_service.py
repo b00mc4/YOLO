@@ -32,7 +32,7 @@ class VerificationCheckResult(str, enum.Enum):
 
 
 def derive_webhook_url() -> str:
-    return f"{settings.backend_public_url.rstrip('/')}/detections"
+    return f"{settings.backend_public_url.rstrip('/')}/api/detections"
 
 async def push_camera_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> bool:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras"

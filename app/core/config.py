@@ -55,7 +55,6 @@ class Settings(BaseSettings):
     mediamtx_jwt_private_key_b64: str
     mediamtx_stream_token_expire_seconds: int = Field(default=18000, ge=60, le=86400)
 
-    # Feature Limits & Constants
     camera_resync_concurrency_limit: int = 10
     camera_manual_verify_rate_limit: int = 1
     camera_manual_verify_rate_window_seconds: float = 30.0
