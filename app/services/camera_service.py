@@ -182,8 +182,8 @@ async def _sync_camera_update(
                 failed_services.append("mediamtx")
 
     if delay is not None and stream_ai:
-        push_ok = await ai_vision_service.push_camera_config(camera_id, stream_ai, delay)
-        if not push_ok:
+        update_ok = await ai_vision_service.update_camera_config(camera_id, stream_ai, delay)
+        if not update_ok:
             failed_services.append("ai_vision")
 
     if failed_services:

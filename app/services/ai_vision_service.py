@@ -67,6 +67,37 @@ async def push_camera_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 
     return True
 
 
+async def update_camera_config(camera_id: uuid.UUID, stream_ai: str, delay: int = 1) -> bool:
+    url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/status"
+
+    try:
+        response = await get_client().post(
+            url,
+            json={
+                "camera_id": str(camera_id),
+                "delay": delay
+            },
+            headers={"X-API-Key": settings.ai_vision_api_key},
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("ai vision update_camera_config request failed for %s: %s", camera_id, exc)
+        return False
+
+    if response.status_code >= 400:
+        logger.warning(
+            "ai vision update_camera_config rejected for %s: status=%s body=%s",
+            camera_id, response.status_code, response.text,
+        )
+        return False
+
+    logger.info(
+        "ai vision update_camera_config succeeded for %s: status=%s body=%s",
+        camera_id, response.status_code, response.text,
+    )
+
+    return True
+
+
 async def set_camera_active_status(camera_id: uuid.UUID, is_active: bool) -> bool:
     url = f"{settings.ai_vision_api_url.rstrip('/')}/partner/cameras/status"
 
