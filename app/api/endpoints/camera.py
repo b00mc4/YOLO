@@ -101,14 +101,6 @@ async def update_camera(
     return await camera_service.update_camera(db, request, background_tasks, current_user, camera_id, payload)
 
 
-@router.post("/{camera_id}/resync-ai-vision", response_model=CameraRead)
-async def resync_camera_ai_vision(
-    camera_id: uuid.UUID,
-    request: Request,
-    current_user: User = Depends(require_roles(*_WRITE_ROLES)),
-    db: AsyncSession = Depends(get_db),
-):
-    return await camera_service.resync_camera_ai_vision(db, request, current_user, camera_id)
 
 
 @router.post("/{camera_id}/verification-check", response_model=CameraVerificationCheckRead)

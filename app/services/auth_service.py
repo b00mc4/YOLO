@@ -229,7 +229,7 @@ async def rotate_refresh_token(db: AsyncSession, raw_refresh_token: str):
 
     remember_me = stored_token.remember_me
     await db.delete(stored_token)
-    session_manager.remove_session_by_id(token_hash)
+    session_manager.remove_session_with_grace(token_hash)
     access_token, new_raw_refresh_token = await issue_tokens(db, user, remember_me)
     return access_token, new_raw_refresh_token, remember_me
 

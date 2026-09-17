@@ -625,46 +625,6 @@ async def resync_all_cameras_on_startup(db: AsyncSession) -> CameraResyncAllRead
     )
     return resync_result
 
-async def resync_camera_ai_vision(
-    db: AsyncSession,
-    request: Request,
-    current_user: User,
-    camera_id: uuid.UUID,
-) -> CameraRead:
-    camera = await get_camera(db, current_user, camera_id)
-
-    pushed = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai, camera.delay)
-    if not pushed:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=CameraErrors.SYNC_WITH_AI_VISION_FAILED,
-        )
-
-    active_ok = await ai_vision_service.set_camera_active_status(camera.id, True)
-    if not active_ok:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=CameraErrors.SYNC_WITH_AI_VISION_FAILED,
-        )
-
-    camera.verification_status = CameraVerificationStatus.PENDING
-
-    await audit_service.log_action(
-        db,
-        request,
-        action="camera_resync_ai_vision",
-        detail=f"triggered re-verification with ai vision service: {camera.name}",
-        user_id=current_user.id,
-        village_id=camera.village_id,
-    )
-
-    await db.commit()
-    await db.refresh(camera)
-
-    camera_verification_service.start_verification(camera.id)
-
-    return _to_camera_read(camera)
-
 
 async def check_camera_verification_now(
     db: AsyncSession,
@@ -710,26 +670,32 @@ async def check_camera_verification_now(
             anomaly_detected = True
             note = (
                 f"ai vision service รายงานว่ากล้อง '{camera.name}' verified แล้ว แต่ในระบบเราบันทึกสถานะเป็น "
-                "failed อยู่ ระบบไม่ได้แก้สถานะให้อัตโนมัติ กรุณาใช้ resync-ai-vision หากต้องการยืนยันซ้ำ"
+                "failed อยู่ ระบบไม่ได้แก้สถานะให้อัตโนมัติ กรุณาติดต่อผู้ดูแลระบบ"
             )
 
     elif result == VerificationCheckResult.NOT_FOUND:
-        if is_pending_locally:
-            await camera_verification_service.finalize_verification(
-                camera.id,
-                verified=False,
-                reason="ai vision service exceeded its verification retry quota and removed the camera",
-                request=request,
-                user_id=current_user.id,
-            )
-            await db.refresh(camera)
-        elif camera.verification_status == CameraVerificationStatus.VERIFIED:
-            anomaly_detected = True
-            note = (
-                f"ai vision service ไม่พบกล้อง '{camera.name}' แล้ว (อาจถูกลบฝั่งเขา) แต่ในระบบเรายังบันทึกสถานะ"
-                f" เป็น verified และ is_active={camera.is_active} อยู่ ระบบไม่ได้ปิดกล้องอัตโนมัติเพื่อป้องกัน "
-                "false negative กรุณาตรวจสอบด้วยตนเองก่อนตัดสินใจ"
-            )
+        pushed = await ai_vision_service.push_camera_config(camera.id, camera.stream_ai, camera.delay)
+        if not pushed:
+            note = "ai vision service ไม่พบกล้องในระบบและพยายามลงทะเบียนใหม่แต่ไม่สำเร็จ กรุณาลองใหม่"
+        else:
+            active_ok = await ai_vision_service.set_camera_active_status(camera.id, camera.is_active)
+            if not active_ok:
+                note = "ลงทะเบียนกล้องใหม่สำเร็จ แต่ไม่สามารถตั้งค่าสถานะเปิด/ปิดได้ กรุณาลองใหม่"
+            else:
+                camera.verification_status = CameraVerificationStatus.PENDING
+                await audit_service.log_action(
+                    db,
+                    request,
+                    action="camera_auto_resync_ai_vision",
+                    detail=f"auto re-registered camera with ai vision service: {camera.name}",
+                    user_id=current_user.id,
+                    village_id=camera.village_id,
+                )
+                await db.commit()
+                await db.refresh(camera)
+                camera_verification_service.start_verification(camera.id)
+                polling_restarted = True
+                note = "ai vision service ไม่พบกล้องในระบบ ระบบได้ทำการส่งข้อมูลลงทะเบียนกล้องใหม่ให้อัตโนมัติและกำลังรอการตรวจสอบ"
 
     if anomaly_detected:
         await audit_service.log_action(
